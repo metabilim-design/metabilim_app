@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:metabilim/auth_service.dart';
 import 'package:metabilim/register_page.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:metabilim/student_shell.dart'; // YENİ: Öğrenci ana iskeletini import ediyoruz
+
+// Gerekli Shell (Ana İskelet) sayfalarını import ediyoruz
+import 'package:metabilim/student_shell.dart';
+import 'package:metabilim/mentor_shell.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,9 +23,8 @@ class _LoginPageState extends State<LoginPage> {
   String _selectedRole = 'Ogrenci';
   bool _isLoading = false;
 
-  // Bildirimleri göstermek için yardımcı fonksiyon
   void _showFeedback(String message, {bool isError = false}) {
-    if (!mounted) return; // Sayfa aktif değilse işlem yapma
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
@@ -38,7 +40,6 @@ class _LoginPageState extends State<LoginPage> {
       String identifier = _identifierController.text;
       String password = _passwordController.text;
 
-      // Admin özel durumu
       if (_selectedRole == 'Admin' && identifier == 'admin' && password == 'admin') {
         _showFeedback('Admin girişi başarılı!');
         // TODO: Admin paneline yönlendir
@@ -52,23 +53,23 @@ class _LoginPageState extends State<LoginPage> {
         role: _selectedRole,
       );
 
+      if (!mounted) return; // Sayfa aktif değilse devam etme
       setState(() => _isLoading = false);
 
       if (result['success']) {
         _showFeedback('${result['role']} olarak giriş yapıldı.');
 
-        // GÜNCELLENDİ: Role göre yönlendirme
         if (result['role'] == 'Ogrenci') {
-          Navigator.pushReplacement( // Geri dönememesi için pushReplacement
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const StudentShell()),
           );
+        } else if (result['role'] == 'Mentor') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MentorShell()),
+          );
         }
-        // TODO: Diğer roller için yönlendirmeler buraya eklenecek
-        // else if (result['role'] == 'Mentor') {
-        //   Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MentorShell()));
-        // }
-
       } else {
         _showFeedback(result['message'], isError: true);
       }
@@ -77,14 +78,10 @@ class _LoginPageState extends State<LoginPage> {
 
   String getIdentifierLabel() {
     switch (_selectedRole) {
-      case 'Ogrenci':
-        return 'Okul Numarası';
-      case 'Mentor':
-        return 'Kullanıcı Adı';
-      case 'Admin':
-        return 'Admin Kullanıcı Adı';
-      default:
-        return 'Kimlik';
+      case 'Ogrenci': return 'Okul Numarası';
+      case 'Mentor': return 'Kullanıcı Adı';
+      case 'Admin': return 'Admin Kullanıcı Adı';
+      default: return 'Kimlik';
     }
   }
 
@@ -97,7 +94,6 @@ class _LoginPageState extends State<LoginPage> {
       ),
       body: SafeArea(
         child: Center(
-          // Tablet ve geniş ekran uyumluluğu için
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
             child: SingleChildScrollView(
@@ -127,7 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     TextFormField(
                       controller: _passwordController,
-                      decoration: const InputDecoration(labelText: 'Şifre', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Şifre', border: const OutlineInputBorder()),
                       obscureText: true,
                       validator: (value) => value!.isEmpty ? 'Şifre boş olamaz' : null,
                     ),
