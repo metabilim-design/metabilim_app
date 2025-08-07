@@ -17,13 +17,15 @@ class AuthService {
       case 'user-not-found':
         return 'Bu kullanıcı adı veya numaraya sahip bir kullanıcı bulunamadı.';
       case 'wrong-password':
-        return 'Yanlış şifre girdiniz.';
+        return 'Mevcut şifrenizi yanlış girdiniz.'; // Bu mesajı şifre değiştirme için güncelledik
+      case 'too-many-requests':
+        return 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.';
       default:
         return 'Bir hata oluştu. Lütfen tekrar deneyin.';
     }
   }
 
-  // Başarı durumunda null, hata durumunda string mesaj döndürecek şekilde güncellendi
+  // ÖĞRENCİ KAYIT
   Future<String?> registerStudent({
     required String name,
     required String surname,
@@ -38,14 +40,15 @@ class AuthService {
         await _firestore.collection('users').doc(user.uid).set({
           'name': name, 'surname': surname, 'number': number, 'email': email, 'role': 'Ogrenci',
         });
-        return null; // Başarılı, hata mesajı yok
+        return null;
       }
     } on FirebaseAuthException catch (e) {
-      return _getErrorMessage(e.code); // Hata mesajını döndür
+      return _getErrorMessage(e.code);
     }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
+  // MENTOR KAYIT
   Future<String?> registerMentor({
     required String name,
     required String surname,
@@ -60,15 +63,15 @@ class AuthService {
         await _firestore.collection('users').doc(user.uid).set({
           'name': name, 'surname': surname, 'username': username, 'email': email, 'role': 'Mentor',
         });
-        return null; // Başarılı
+        return null;
       }
     } on FirebaseAuthException catch (e) {
-      return _getErrorMessage(e.code); // Hata mesajını döndür
+      return _getErrorMessage(e.code);
     }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
-  // Giriş fonksiyonu da artık rolü ve hata mesajını döndürecek
+  // GİRİŞ YAPMA
   Future<Map<String, dynamic>> signIn({
     required String identifier,
     required String password,
@@ -86,11 +89,53 @@ class AuthService {
       User? user = userCredential.user;
       if (user != null) {
         DocumentSnapshot doc = await _firestore.collection('users').doc(user.uid).get();
-        return {'success': true, 'role': doc.get('role')}; // Başarılı giriş ve rol
+        return {'success': true, 'role': doc.get('role')};
       }
       return {'success': false, 'message': 'Kullanıcı bulunamadı.'};
     } on FirebaseAuthException catch (e) {
-      return {'success': false, 'message': _getErrorMessage(e.code)}; // Hata mesajı
+      return {'success': false, 'message': _getErrorMessage(e.code)};
     }
+  }
+
+  // KULLANICI ROLÜNÜ GETİRME
+  Future<String?> getUserRole(String uid) async {
+    try {
+      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      return doc.get('role');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // GÜVENLİ ŞİFRE DEĞİŞTİRME FONKSİYONU
+  Future<String?> changePassword({
+    required String oldPassword,
+    required String newPassword
+  }) async {
+    User? user = _auth.currentUser;
+    if (user != null && user.email != null) {
+      try {
+        // 1. Kullanıcıyı mevcut şifresiyle yeniden doğrula
+        AuthCredential credential = EmailAuthProvider.credential(
+            email: user.email!,
+            password: oldPassword
+        );
+        await user.reauthenticateWithCredential(credential);
+
+        // 2. Yeniden doğrulama başarılı olursa, yeni şifreyi ayarla
+        await user.updatePassword(newPassword);
+        return null; // Başarılı, hata yok
+      } on FirebaseAuthException catch (e) {
+        return _getErrorMessage(e.code); // Hata mesajını döndür (örn: wrong-password)
+      } catch (e) {
+        return "Şifre güncellenirken bir hata oluştu.";
+      }
+    }
+    return "Önce giriş yapmanız gerekiyor.";
+  }
+
+  // ÇIKIŞ YAPMA FONKSİYONU
+  Future<void> signOut() async {
+    await _auth.signOut();
   }
 }
