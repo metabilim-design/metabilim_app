@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Etkinlikleri modellemek için basit bi
-// r sınıf
+// Etkinlikleri modellemek için basit bir sınıf
 class Event {
   final String title;
   final String time;
@@ -23,10 +21,8 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  // Takvimin durumunu yöneten değişkenler
-  CalendarFormat _calendarFormat = CalendarFormat.month;
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  // DEĞİŞİKLİK: Takvim state'leri yerine sadece seçili tarihi tutan tek bir değişken
+  DateTime _selectedDate = DateTime.now();
 
   String _userName = '...'; // Başlangıçta boş
   bool _isLoading = true;
@@ -50,35 +46,48 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _selectedDay = _focusedDay;
     _loadUserData();
   }
 
-  // Giriş yapan kullanıcının adını Firestore'dan çeker
+  // Giriş yapan kullanıcının adını Firestore'dan çeker (DEĞİŞİKLİK YOK)
   Future<void> _loadUserData() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       DocumentSnapshot userData = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      setState(() {
-        _userName = userData.get('name');
-        _isLoading = false;
-      });
+      if (mounted) { // Widget hala ağaçtaysa state'i güncelle
+        setState(() {
+          _userName = userData.get('name');
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // Seçilen güne ait etkinlikleri getiren fonksiyon
+  // Seçilen güne ait etkinlikleri getiren fonksiyon (DEĞİŞİKLİK YOK)
   List<Event> _getEventsForDay(DateTime day) {
+    // Saat, dakika ve saniye bilgilerini yok sayarak sadece tarihi karşılaştırırız
     return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
+  }
+
+  // YENİ FONKSİYON: Tarihi bir gün ileri veya geri almak için
+  void _changeDay(int amount) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: amount));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // DEĞİŞİKLİK: Seçili güne ait etkinlikleri burada alıyoruz
+    final selectedEvents = _getEventsForDay(_selectedDate);
+
     return Scaffold(
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hoş Geldin Mesajı
+          // Hoş Geldin Mesajı (DEĞİŞİKLİK YOK)
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
             child: Row(
               children: [
                 if (_isLoading)
@@ -96,54 +105,38 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
 
-          // İnteraktif Takvim
-          TableCalendar(
-            locale: 'tr_TR', // Takvimi Türkçeleştirir
-            firstDay: DateTime.utc(2024, 1, 1),
-            lastDay: DateTime.utc(2026, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay; // Seçilen güne odaklan
-              });
-            },
-            onFormatChanged: (format) {
-              if (_calendarFormat != format) {
-                setState(() {
-                  _calendarFormat = format;
-                });
-              }
-            },
-            onPageChanged: (focusedDay) {
-              _focusedDay = focusedDay;
-            },
-            calendarStyle: const CalendarStyle(
-              todayDecoration: BoxDecoration(
-                color: Color(0x8000A99D), // Bugünün rengi (yarı saydam turkuaz)
-                shape: BoxShape.circle,
-              ),
-              selectedDecoration: BoxDecoration(
-                color: Color(0xFF003366), // Seçili günün rengi (koyu mavi)
-                shape: BoxShape.circle,
-              ),
-            ),
-            headerStyle: HeaderStyle(
-              titleCentered: true,
-              formatButtonVisible: false, // 2 Hafta/Hafta butonunu gizler
-            ),
-          ),
+          // YENİ WIDGET: Günlük tarih şeridi
+          _buildDateScroller(),
 
           const SizedBox(height: 8.0),
 
-          // Seçilen Güne Ait Etkinlikler Listesi
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'Günün Programı',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF003366).withOpacity(0.8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8.0),
+
+          // Seçilen Güne Ait Etkinlikler Listesi (DEĞİŞİKLİK YOK)
           Expanded(
-            child: ListView.builder(
-              itemCount: _getEventsForDay(_selectedDay!).length,
+            child: selectedEvents.isEmpty
+                ? Center(
+              child: Text(
+                'Bugün için planlanmış bir etkinlik yok.',
+                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
+              ),
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.only(top: 4.0),
+              itemCount: selectedEvents.length,
               itemBuilder: (context, index) {
-                final event = _getEventsForDay(_selectedDay!)[index];
+                final event = selectedEvents[index];
                 return _buildEventTile(event);
               },
             ),
@@ -153,7 +146,40 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Etkinlik listesi elemanını oluşturan fonksiyon
+  // YENİ WIDGET: Üst kısımdaki yatay tarih seçiciyi oluşturan widget.
+  Widget _buildDateScroller() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Önceki güne gitmek için kullanılan ikon butonu.
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.blueGrey),
+            onPressed: () => _changeDay(-1),
+          ),
+          // Tarihin gösterildiği alan.
+          Text(
+            // intl paketini kullanarak tarihi "9 Ağustos Cuma" formatında gösterir.
+            DateFormat('d MMMM EEEE', 'tr_TR').format(_selectedDate),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF003366),
+            ),
+          ),
+          // Sonraki güne gitmek için kullanılan ikon butonu.
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios, color: Colors.blueGrey),
+            onPressed: () => _changeDay(1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Etkinlik listesi elemanını oluşturan fonksiyon (DEĞİŞİKLİK YOK)
   Widget _buildEventTile(Event event) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
@@ -170,9 +196,8 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
       child: ListTile(
-        // DEĞİŞİKLİK BURADA: İkonu daha anlaşılır hale getiriyoruz
         leading: SizedBox(
-          width: 50, // Sabit bir genişlik vererek hizalamayı güzelleştiriyoruz
+          width: 50,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
