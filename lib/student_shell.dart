@@ -34,7 +34,7 @@ class _StudentShellState extends State<StudentShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Metabilim', style: GoogleFonts.poppins()),
+        title: Text('Metabilim Öğrenci', style: GoogleFonts.poppins()),
         automaticallyImplyLeading: false, // Geri tuşunu kaldırır
         actions: [
           IconButton(
