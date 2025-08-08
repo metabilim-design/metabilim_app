@@ -5,6 +5,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'give_books_page.dart'; // Yeni sayfa eklendi
 
 class ConfirmUploadPage extends StatefulWidget {
   final List<File> imageFiles;
@@ -17,14 +19,12 @@ class ConfirmUploadPage extends StatefulWidget {
 class _ConfirmUploadPageState extends State<ConfirmUploadPage> {
   bool _isProcessing = false;
 
-  // Cihaz üzerinde OCR yapar, sonra metni Gemini AI'ye yollayıp işler
   Future<void> _processImagesWithAI() async {
     if (widget.imageFiles.isEmpty) return;
     if (!mounted) return;
 
     setState(() => _isProcessing = true);
 
-    // 1. Adım: Cihaz üzerinde OCR ile ham metni oku
     final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
     String fullText = "";
     for (final imageFile in widget.imageFiles) {
@@ -36,23 +36,20 @@ class _ConfirmUploadPageState extends State<ConfirmUploadPage> {
 
     if (fullText.trim().isEmpty) {
       _showErrorDialog("Fotoğraflardan metin okunamadı.");
-      if(mounted) setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
       return;
     }
 
-    // 2. Adım: Gemini Yapay Zekasına gönder ve sonucu al
     try {
-      // .env dosyasından API anahtarını yükle
       await dotenv.load(fileName: ".env");
       final apiKey = dotenv.env['GEMINI_API_KEY'];
 
       if (apiKey == null) {
-        throw Exception('API Anahtarı bulunamadı. Projenin ana klasöründeki .env dosyasını kontrol et.');
+        throw Exception('API Anahtarı bulunamadı.');
       }
 
       final model = GenerativeModel(model: 'gemini-1.5-flash-latest', apiKey: apiKey);
 
-      // Kullanıcının isteklerine göre güncellenmiş prompt
       final prompt = """Aşağıdaki metin, bir kitabın içindekiler sayfasıdır. Bu metinden yalnızca ana konu başlıklarını ve bunlara karşılık gelen sayfa numaralarını ayrıştır.
 
 Önemli Kurallar:
@@ -70,18 +67,16 @@ $fullText
 
       final response = await model.generateContent([Content.text(prompt)]);
 
-      // Gelen cevabı temizle ve JSON'a çevir
       final cleanResponse = response.text!.replaceAll('```json', '').replaceAll('```', '').trim();
       final List<dynamic> parsedData = jsonDecode(cleanResponse);
 
-      if(mounted) {
+      if (mounted) {
         setState(() => _isProcessing = false);
         _showResultDialog(parsedData);
       }
-
     } catch (e) {
       print("Yapay Zeka Hatası: $e");
-      if(mounted) {
+      if (mounted) {
         setState(() => _isProcessing = false);
         _showErrorDialog("Metin işlenirken bir hata oluştu: ${e.toString()}");
       }
@@ -99,7 +94,6 @@ $fullText
             shrinkWrap: true,
             itemCount: results.length,
             itemBuilder: (context, index) {
-              // Gelen verinin Map formatında ve beklenen anahtarlara sahip olduğunu kontrol edelim.
               final item = results[index] as Map<String, dynamic>;
               final konu = item['konu'] ?? 'Konu bulunamadı';
               final sayfa = item['sayfa'] ?? 'Sayfa yok';
@@ -117,8 +111,11 @@ $fullText
           ),
           TextButton(
             onPressed: () {
-              // TODO: Bu veriyi alıp TYT/AYT formuna yönlendir
               Navigator.of(context).pop();
+              // Yeni sayfaya yönlendirme ve veriyi aktarma
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (context) => GiveBooksPage(topics: results),
+              ));
             },
             child: const Text('Onayla ve Devam Et'),
           ),
@@ -133,7 +130,7 @@ $fullText
       builder: (context) => AlertDialog(
         title: const Text('Hata'),
         content: Text(message),
-        actions: [ TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Kapat')) ],
+        actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Kapat'))],
       ),
     );
   }
