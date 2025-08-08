@@ -29,19 +29,16 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   @override
   void initState() {
     super.initState();
-    // Uygulama her açıldığında değil, sadece bu sayfa ilk oluşturulduğunda
-    // öğrencileri çekmek daha verimli.
     _fetchStudents();
   }
 
   Future<void> _fetchStudents() async {
-    // ... Bu fonksiyon aynı kalıyor
     setState(() => _isLoading = true);
     QuerySnapshot studentSnapshot = await _firestore
         .collection('users')
         .where('role', isEqualTo: 'Ogrenci')
         .get();
-    if(mounted){
+    if (mounted) {
       setState(() {
         _students = studentSnapshot.docs;
         _isLoading = false;
@@ -50,7 +47,6 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   }
 
   void _selectSession(String session) {
-    // ... Bu fonksiyon aynı kalıyor
     setState(() {
       _selectedSession = session;
       _attendanceStatus = {};
@@ -61,14 +57,21 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   }
 
   void _markAttendance(String studentId, String status) {
-    // ... Bu fonksiyon aynı kalıyor
     setState(() {
       _attendanceStatus[studentId] = status;
     });
   }
 
+  // YENİ FONKSİYON: Tüm öğrencileri "geldi" olarak işaretler
+  void _markAllPresent() {
+    setState(() {
+      for (var student in _students) {
+        _attendanceStatus[student.id] = 'geldi';
+      }
+    });
+  }
+
   Future<void> _saveAttendance() async {
-    // ... Bu fonksiyon aynı kalıyor
     if (_selectedSession == null) return;
     setState(() => _isLoading = true);
     WriteBatch batch = _firestore.batch();
@@ -81,12 +84,12 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
       }
     });
     await batch.commit();
-    if(mounted){
+    if (mounted) {
       setState(() {
         _isLoading = false;
         _selectedSession = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Yoklama başarıyla kaydedildi!'), backgroundColor: Colors.green), );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yoklama başarıyla kaydedildi!'), backgroundColor: Colors.green),);
     }
   }
 
@@ -101,9 +104,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     );
   }
 
-  // GÜNCELLENDİ: Oturum seçme ekranını daha dolu ve şık hale getiriyoruz
   Widget _buildSessionSelection() {
-    // Tarihi formatlamak için
     final String formattedDate = DateFormat.yMMMMd('tr_TR').format(DateTime.now());
 
     return Padding(
@@ -137,7 +138,6 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
             ),
           ),
           const SizedBox(height: 20),
-          // Oturum Butonları
           ..._sessions.map((session) {
             return Card(
               elevation: 3,
@@ -156,9 +156,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     );
   }
 
-  // Öğrenci listesi ve yoklama ekranını oluşturan widget
+  // GÜNCELLENMİŞ WİDGET: "Tümünü Var Yap" butonu eklendi
   Widget _buildAttendanceList() {
-    // ... Bu fonksiyon aynı kalıyor
     return Column(
       children: [
         Padding(
@@ -166,9 +165,25 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton( icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _selectedSession = null), ),
-              Text(_selectedSession!, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-              ElevatedButton( onPressed: _saveAttendance, child: const Text('Kaydet'), )
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _selectedSession = null),
+              ),
+              Text(
+                _selectedSession!,
+                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: _markAllPresent,
+                child: Text(
+                  'Tümünü Var Yap',
+                  style: GoogleFonts.poppins(color: Theme.of(context).primaryColor),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _saveAttendance,
+                child: const Text('Kaydet'),
+              ),
             ],
           ),
         ),
@@ -197,8 +212,14 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
                       ),
                       Row(
                         children: [
-                          IconButton( icon: Icon(Icons.check_circle, color: status == 'geldi' ? Colors.green : Colors.grey), onPressed: () => _markAttendance(studentId, 'geldi'), ),
-                          IconButton( icon: Icon(Icons.cancel, color: status == 'gelmedi' ? Colors.red : Colors.grey), onPressed: () => _markAttendance(studentId, 'gelmedi'), ),
+                          IconButton(
+                            icon: Icon(Icons.check_circle, color: status == 'geldi' ? Colors.green : Colors.grey),
+                            onPressed: () => _markAttendance(studentId, 'geldi'),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.cancel, color: status == 'gelmedi' ? Colors.red : Colors.grey),
+                            onPressed: () => _markAttendance(studentId, 'gelmedi'),
+                          ),
                         ],
                       ),
                     ],

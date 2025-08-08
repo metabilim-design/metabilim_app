@@ -50,20 +50,31 @@ class _ConfirmUploadPageState extends State<ConfirmUploadPage> {
 
       final model = GenerativeModel(model: 'gemini-1.5-flash-latest', apiKey: apiKey);
 
-      final prompt = """Aşağıdaki metin, bir kitabın içindekiler sayfasıdır. Bu metinden yalnızca ana konu başlıklarını ve bunlara karşılık gelen sayfa numaralarını ayrıştır.
+      // GÜNCELLENMİŞ PROMPT BAŞLANGICI
+      final prompt = """Aşağıdaki metin, bir ders kitabının içindekiler kısmından alınmıştır. Bu metni analiz ederek yalnızca ana konuların başlıklarını ve bunlara karşılık gelen sayfa numaralarını çıkar.
 
-Önemli Kurallar:
-- Bir satırın ana konu ve sayfa numarası içerdiğini, konu ile sayfa numarası arasında genellikle "...." veya benzeri noktalama işaretlerinin bulunmasından anla.
-- Eğer bir satırda bu kalıp (konu-sayfa ikilisi) yoksa, o satırı tamamen atla (örneğin, alt başlıkları veya gereksiz bilgileri dahil etme).
-- Sadece ana konu başlıklarını ve sayfa numaralarını alarak aşağıdaki gibi bir JSON listesi oluştur.
-- Konu başlıklarından parantez içindeki "(Test ...)" gibi kısımları temizle.
+İşlemin adımları ve kurallar şunlar olmalıdır:
 
-Girdi Metni:
+1.  **Ana Konu Başlıklarını Belirle:** Ana konu başlıkları genellikle 'ÜNİTE', 'BÖLÜM' gibi kelimelerle veya kalın, büyük fontlu yazılarla başlar. Ancak bu her zaman geçerli olmayabilir. Ana konu başlıkları, genellikle alt başlıkları olan ve bir dersin ana ünitesini temsil eden metinlerdir. "Test", "Kazanım Testi", "Uygulama Testi", "Nefes Açar", "Zihin Açar", "Cevap Anahtarları" gibi ifadeler içeren satırları ve bu satırların sayfa numaralarını **göz ardı et**.
+
+2.  **Alt Başlıkları ve Ek Bilgileri Göz Ardı Et:** Ana başlıkların altında yer alan daha küçük fontlu alt başlıkları veya 'Sayfa [6-13]', '80 dk / 2 gün' gibi ek bilgileri dikkate alma. Sadece ana başlığı ve başlık sonundaki sayfa numarasını ayır. Eğer bir başlığın sayfa aralığı varsa (örneğin "Sayfa [6-13]"), başlangıç sayfasını (bu örnekte 6) kullan. Eğer tek bir sayfa numarası varsa, onu kullan.
+
+3.  **Çıktı Formatı:** Çıktıyı, her bir konunun bir satırda olduğu ve "Konu Başlığı : Sayfa Numarası" formatında olduğu düz bir metin olarak hazırla. Bu format, projenizdeki mevcut sisteme kolayca entegre edilebilir bir yapı sağlayacaktır.
+
+4.  **Sıralama:** Çıkardığın konu başlıklarını, sayfa numaralarına göre küçükten büyüğe doğru sırala.
+
+5.  **Özel Durumlar:**
+    * **Birden Fazla Sütun:** Eğer metin, sol ve sağ olmak üzere iki sütun halinde ise, her iki sütundaki ana konu başlıklarını da ayrı ayrı işle. Ancak, çıktıyı sayfa numarasına göre sıraladığın için zaten doğru düzene girecektir.
+    * **Yanlış OCR Okumaları:** Bazen metinlerdeki noktalı çizgiler veya sayfa numaraları yanlış okunabilir. Bu gibi durumlarda metnin genel bağlamına göre en mantıklı sonucu üretmeye çalış. Örneğin, bir başlıkta nokta nokta sonrası gelen sayfa numarasını doğru şekilde ayırmaya odaklan.
+
+---
+**Girdi Metni:**
 $fullText
 
-Çıktı Formatı (yalnızca JSON):
+**Çıktı Formatı (yalnızca JSON):**
 [{"konu": "Konu Adı", "sayfa": "Sayfa Numarası"}]
 """;
+// GÜNCELLENMİŞ PROMPT SONU
 
       final response = await model.generateContent([Content.text(prompt)]);
 
