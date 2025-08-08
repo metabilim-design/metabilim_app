@@ -51,7 +51,22 @@ class _ConfirmUploadPageState extends State<ConfirmUploadPage> {
       }
 
       final model = GenerativeModel(model: 'gemini-1.5-flash-latest', apiKey: apiKey);
-      final prompt = "Aşağıdaki bir kitabın içindekiler sayfası metnidir. Bu metni analiz et ve bana her bir konu başlığı ile başlangıç sayfa numarasını içeren bir JSON listesi döndür. Sadece JSON formatında, başka hiçbir ek metin olmadan cevap ver. Konu başlıklarından '(Test ...)' gibi kısımları temizle. JSON formatı şöyle olsun: [{\"konu\": \"Konu Adı\", \"sayfa\": \"Sayfa Numarası\"}]. Metin: \n$fullText";
+
+      // Kullanıcının isteklerine göre güncellenmiş prompt
+      final prompt = """Aşağıdaki metin, bir kitabın içindekiler sayfasıdır. Bu metinden yalnızca ana konu başlıklarını ve bunlara karşılık gelen sayfa numaralarını ayrıştır.
+
+Önemli Kurallar:
+- Bir satırın ana konu ve sayfa numarası içerdiğini, konu ile sayfa numarası arasında genellikle "...." veya benzeri noktalama işaretlerinin bulunmasından anla.
+- Eğer bir satırda bu kalıp (konu-sayfa ikilisi) yoksa, o satırı tamamen atla (örneğin, alt başlıkları veya gereksiz bilgileri dahil etme).
+- Sadece ana konu başlıklarını ve sayfa numaralarını alarak aşağıdaki gibi bir JSON listesi oluştur.
+- Konu başlıklarından parantez içindeki "(Test ...)" gibi kısımları temizle.
+
+Girdi Metni:
+$fullText
+
+Çıktı Formatı (yalnızca JSON):
+[{"konu": "Konu Adı", "sayfa": "Sayfa Numarası"}]
+""";
 
       final response = await model.generateContent([Content.text(prompt)]);
 
