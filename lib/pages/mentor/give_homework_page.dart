@@ -19,7 +19,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   final List<String> _selectedSubjects = [];
   final Map<String, List<DocumentSnapshot>> _selectedBooksBySubject = {};
   final Map<String, Map<String, List<Map<String, dynamic>>>> _selectedTopicsByBook = {};
-  final Map<String, int> _etutCounts = {}; // YENİ: Etüt sayılarını tutar
+  final Map<String, int> _etutCounts = {};
 
   // --- Sabit Listeler ---
   final List<String> _tytSubjects = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü'];
@@ -44,6 +44,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
       case 4: return 'Kitapları Seçin';
       case 5: return 'Konuları Seçin';
       case 6: return 'Etüt Sayısı Belirle';
+      case 7: return 'Program Özeti';
       default: return 'Program Özeti';
     }
   }
@@ -55,7 +56,8 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
       case 3: return _buildSubjectSelection();
       case 4: return _buildBookSelection();
       case 5: return _buildTopicSelection();
-      case 6: return _buildEtutSelection(); // YENİ: Özet ve Etüt Sayısı Seçim Adımı
+      case 6: return _buildEtutSelection();
+      case 7: return _buildSummaryAndConfirmation();
       default: return Container();
     }
   }
@@ -248,9 +250,9 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     _selectedTopicsByBook.forEach((subject, books) {
       books.forEach((bookId, topics) {
         topics.forEach((topic) {
-          final bookDoc = _selectedBooksBySubject[subject.split('-').last]?.firstWhere((doc) => doc.id == bookId);
+          final bookDoc = _selectedBooksBySubject[subject]?.firstWhere((doc) => doc.id == bookId, orElse: () => throw Exception('Book not found'));
           final bookData = bookDoc?.data() as Map<String, dynamic>;
-          final fullSubjectName = _selectedSubjects.firstWhere((id) => id.endsWith(subject.split('-').last));
+          final fullSubjectName = _selectedSubjects.firstWhere((id) => id.endsWith(subject));
 
           allSelectedTopics.add({
             'subject': fullSubjectName,
@@ -336,13 +338,131 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     );
   }
 
+  // --- Adım 7: PROGRAM ÖZETİ VE ONAYI ---
+  Widget _buildSummaryAndConfirmation() {
+    final List<Map<String, dynamic>> allSelectedTopics = [];
+    _selectedTopicsByBook.forEach((subject, books) {
+      books.forEach((bookId, topics) {
+        topics.forEach((topic) {
+          final bookDoc = _selectedBooksBySubject[subject]?.firstWhere((doc) => doc.id == bookId, orElse: () => throw Exception('Book not found'));
+          final bookData = bookDoc?.data() as Map<String, dynamic>;
+          final fullSubjectName = _selectedSubjects.firstWhere((id) => id.endsWith(subject));
+          final uniqueId = '$subject-$bookId-${topic['konu']}';
+          final etutCount = _etutCounts[uniqueId] ?? 1;
+
+          allSelectedTopics.add({
+            'subject': fullSubjectName,
+            'bookPublisher': bookData['publisher'],
+            'bookType': bookData['bookType'],
+            'konu': topic['konu'],
+            'sayfa': topic['sayfa'],
+            'etut': etutCount,
+          });
+        });
+      });
+    });
+
+    if (_selectedStudent == null || _selectedDateRange == null || allSelectedTopics.isEmpty) {
+      return Center(child: Text('Özet için gerekli veriler eksik.', style: GoogleFonts.poppins()));
+    }
+
+    final studentData = _selectedStudent!.data() as Map<String, dynamic>;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Program Özeti', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSummaryItem(Icons.person_outline, 'Öğrenci', '${studentData['name']} ${studentData['surname']}'),
+                  _buildSummaryItem(Icons.date_range_outlined, 'Tarih Aralığı', '${DateFormat.yMMMMd('tr_TR').format(_selectedDateRange!.start)} - ${DateFormat.yMMMMd('tr_TR').format(_selectedDateRange!.end)}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              itemCount: allSelectedTopics.length,
+              itemBuilder: (context, index) {
+                final topic = allSelectedTopics[index];
+                return Card(
+                  elevation: 1,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(
+                      '${topic['subject'].split('-').last}: ${topic['bookPublisher']} - ${topic['bookType']}',
+                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${topic['konu']} (Sayfa: ${topic['sayfa']})',
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${topic['etut']} Etüt',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          _buildConfirmationButton(),
+        ],
+      ),
+    );
+  }
+
   // --- Yardımcı Widget'lar ve Fonksiyonlar ---
-  Widget _buildStepNavigationBar({required VoidCallback? onNextPressed}) {
+
+  Widget _buildSummaryItem(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Theme.of(context).primaryColor),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: GoogleFonts.poppins(color: Colors.grey.shade600, fontSize: 12)),
+              Text(value, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConfirmationButton() {
+    return _buildStepNavigationBar(
+      onNextPressed: _saveHomework,
+      buttonText: 'Bitir ve Programı Oluştur',
+    );
+  }
+
+  Widget _buildStepNavigationBar({required VoidCallback? onNextPressed, String buttonText = 'Devam Et'}) {
     return Padding(padding: const EdgeInsets.all(16.0), child: ElevatedButton.icon(
       style: _getPrimaryButtonStyle(fullWidth: true),
       onPressed: onNextPressed,
-      icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white),
-      label: Text('Devam Et', style: GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
+      icon: buttonText == 'Devam Et' ? const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white) : const Icon(Icons.check, size: 20, color: Colors.white),
+      label: Text(buttonText, style: GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
     ));
   }
 
@@ -364,5 +484,68 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
 
   Widget _buildDateDisplay(String label, DateTime? date) {
     return Column(children: [ Text(label, style: GoogleFonts.poppins(color: Colors.grey.shade600)), const SizedBox(height: 8), Text(date != null ? DateFormat.yMMMMd('tr_TR').format(date) : '-- / -- / ----', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600))]);
+  }
+
+  Future<void> _saveHomework() async {
+    if (_selectedStudent == null || _selectedDateRange == null || _selectedTopicsByBook.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lütfen tüm adımları tamamlayın.'), backgroundColor: Colors.red));
+      return;
+    }
+
+    try {
+      final homeworkRef = FirebaseFirestore.instance.collection('homeworks').doc();
+
+      final List<Map<String, dynamic>> homeworkDetails = [];
+      _selectedTopicsByBook.forEach((subjectUniqueId, books) {
+        final subject = subjectUniqueId.split('-').last;
+        books.forEach((bookId, topics) {
+          topics.forEach((topic) {
+            final bookDoc = _selectedBooksBySubject[subject]?.firstWhere((doc) => doc.id == bookId, orElse: () => throw Exception('Book not found'));
+            final bookData = bookDoc?.data() as Map<String, dynamic>;
+            final uniqueId = '$subjectUniqueId-$bookId-${topic['konu']}';
+            final etutCount = _etutCounts[uniqueId] ?? 1;
+
+            homeworkDetails.add({
+              'subject': subject,
+              'bookId': bookId,
+              'bookPublisher': bookData['publisher'],
+              'bookType': bookData['bookType'],
+              'konu': topic['konu'],
+              'sayfa': topic['sayfa'],
+              'etut': etutCount,
+              'status': 'assigned',
+            });
+          });
+        });
+      });
+
+      final homeworkData = {
+        'studentUid': _selectedStudent!.id,
+        'studentName': (_selectedStudent!.data() as Map<String, dynamic>)['name'],
+        'startDate': _selectedDateRange!.start,
+        'endDate': _selectedDateRange!.end,
+        'assignedAt': FieldValue.serverTimestamp(),
+        'homeworks': homeworkDetails,
+      };
+
+      await homeworkRef.set(homeworkData);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödev başarıyla atandı!'), backgroundColor: Colors.green));
+        setState(() {
+          _currentStep = 1;
+          _selectedStudent = null;
+          _selectedDateRange = null;
+          _selectedSubjects.clear();
+          _selectedBooksBySubject.clear();
+          _selectedTopicsByBook.clear();
+          _etutCounts.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödev atanırken bir hata oluştu: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 }
