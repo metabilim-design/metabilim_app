@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:metabilim/pages/mentor/confirm_upload_page.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firebase Firestore paketi eklendi
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:metabilim/pages/mentor/edit_book_page.dart';
+import 'package:metabilim/pages/mentor/give_practices_page.dart';
+import 'package:metabilim/pages/mentor/edit_practice_page.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:flutter_speed_dial/flutter_speed_dial.dart'; // YENİ: Speed Dial paketi
 
 class BookListPage extends StatefulWidget {
   const BookListPage({super.key});
@@ -15,85 +20,136 @@ class BookListPage extends StatefulWidget {
 class _BookListPageState extends State<BookListPage> {
   final ImagePicker _picker = ImagePicker();
 
+  Stream<List<DocumentSnapshot>> _createCombinedStream() {
+    final booksStream = FirebaseFirestore.instance.collection('books').snapshots();
+    final practicesStream = FirebaseFirestore.instance.collection('practices').snapshots();
+
+    return Rx.combineLatest2(
+      booksStream,
+      practicesStream,
+          (QuerySnapshot booksSnapshot, QuerySnapshot practicesSnapshot) {
+        final List<DocumentSnapshot> allDocs = [...booksSnapshot.docs, ...practicesSnapshot.docs];
+        allDocs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final Timestamp tsA = aData['createdAt'] ?? Timestamp.fromMillisecondsSinceEpoch(0);
+          final Timestamp tsB = bData['createdAt'] ?? Timestamp.fromMillisecondsSinceEpoch(0);
+          return tsB.compareTo(tsA);
+        });
+        return allDocs;
+      },
+    );
+  }
+
   Future<void> _pickMultipleImages() async {
     final List<XFile> pickedFiles = await _picker.pickMultiImage();
-
     if (pickedFiles.isNotEmpty && mounted) {
       final List<File> imageFiles = pickedFiles.map((file) => File(file.path)).toList();
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ConfirmUploadPage(imageFiles: imageFiles),
-        ),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (context) => ConfirmUploadPage(imageFiles: imageFiles)));
     }
+  }
+
+  void _navigateToAddPractice() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const GivePracticesPage()));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('books').orderBy('createdAt', descending: true).snapshots(),
+      appBar: AppBar(
+        title: Text('Materyaller', style: GoogleFonts.poppins()),
+      ),
+      body: StreamBuilder<List<DocumentSnapshot>>(
+        stream: _createCombinedStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Veriler yüklenirken bir hata oluştu.',
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.red),
-              ),
-            );
+            return Center(child: Text('Veriler yüklenirken bir hata oluştu: ${snapshot.error}'));
           }
-
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Text(
-                'Henüz eklenmiş bir kitabınız yok.',
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
-              ),
-            );
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Henüz eklenmiş bir materyaliniz yok.'));
           }
-
-          final books = snapshot.data!.docs;
-
+          final combinedItems = snapshot.data!;
           return ListView.builder(
             padding: const EdgeInsets.all(8.0),
-            itemCount: books.length,
+            itemCount: combinedItems.length,
             itemBuilder: (context, index) {
-              final book = books[index].data() as Map<String, dynamic>;
-              return Card(
-                elevation: 4,
-                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  title: Text(
-                    '${book['subject']} - ${book['publisher']}',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    'Seviye: ${book['level']}, Tür: ${book['bookType']}',
-                    style: GoogleFonts.poppins(color: Colors.grey[600]),
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    // TODO: Buraya kitap detay sayfasını açma navigasyonunu ekle
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => BookDetailPage(book: book)));
-                  },
-                ),
-              );
+              final item = combinedItems[index];
+              final data = item.data() as Map<String, dynamic>;
+              final isBook = data.containsKey('bookType');
+              if (isBook) {
+                return _buildBookTile(item);
+              } else {
+                return _buildPracticeTile(item);
+              }
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _pickMultipleImages,
+      // GÜNCELLEME: FloatingActionButton'lar SpeedDial ile değiştirildi
+      floatingActionButton: SpeedDial(
+        icon: Icons.add, // Ana ikon '+'
+        activeIcon: Icons.close, // Açıkkenki ikon 'x'
         backgroundColor: Theme.of(context).colorScheme.primary,
-        icon: const Icon(Icons.add_a_photo_outlined, color: Colors.white),
-        label: Text('Yeni Kitap Ekle', style: GoogleFonts.poppins(color: Colors.white)),
+        foregroundColor: Colors.white,
+        overlayColor: Colors.black,
+        overlayOpacity: 0.4,
+        spacing: 12,
+        children: [
+          SpeedDialChild(
+            child: const Icon(Icons.note_alt_outlined),
+            label: 'Deneme Ekle',
+            labelStyle: GoogleFonts.poppins(),
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+            foregroundColor: Colors.white,
+            onTap: _navigateToAddPractice,
+          ),
+          SpeedDialChild(
+            child: const Icon(Icons.add_a_photo_outlined),
+            label: 'Yeni Kitap Ekle',
+            labelStyle: GoogleFonts.poppins(),
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+            foregroundColor: Colors.white,
+            onTap: _pickMultipleImages,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookTile(DocumentSnapshot doc) {
+    final book = doc.data() as Map<String, dynamic>;
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: const Icon(Icons.menu_book, color: Colors.blueGrey),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        title: Text('${book['subject']} - ${book['publisher']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        subtitle: Text('Seviye: ${book['level']} | Tür: ${book['bookType']}', style: GoogleFonts.poppins(color: Colors.grey[600])),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EditBookPage(bookId: doc.id, bookData: book))),
+      ),
+    );
+  }
+
+  Widget _buildPracticeTile(DocumentSnapshot doc) {
+    final practice = doc.data() as Map<String, dynamic>;
+    return Card(
+      elevation: 4,
+      color: Colors.teal.shade50,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: const Icon(Icons.note_alt, color: Colors.teal),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        title: Text('${practice['subject']} - ${practice['publisher']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        subtitle: Text('Seviye: ${practice['level']} | Adet: ${practice['count']}', style: GoogleFonts.poppins(color: Colors.grey[700])),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EditPracticePage(practiceId: doc.id, practiceData: practice))),
       ),
     );
   }

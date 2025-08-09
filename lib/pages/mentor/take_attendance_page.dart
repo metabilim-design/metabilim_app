@@ -20,8 +20,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   Map<String, String> _attendanceStatus = {};
   bool _isLoading = false;
 
+  // DÜZELTME BURADA YAPILDI
   final List<Map<String, dynamic>> _sessions = [
-    {'name': 'Öğleden Önce', 'icon': Icons.wb_sunny_outlined},
+    {'name': 'Öğleden Önce', 'icon': Icons.wb_sunny_outlined}, // 'Önce' olarak düzeltildi
     {'name': 'Öğleden Sonra', 'icon': Icons.brightness_5_outlined},
     {'name': 'Akşam', 'icon': Icons.nightlight_round},
   ];
@@ -46,6 +47,18 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     }
   }
 
+  String _getAbbreviatedSession(String? sessionName) {
+    if (sessionName == null) return '';
+    switch (sessionName) {
+      case 'Öğleden Önce':
+        return 'Ö.Ö';
+      case 'Öğleden Sonra':
+        return 'Ö.S';
+      default:
+        return sessionName;
+    }
+  }
+
   void _selectSession(String session) {
     setState(() {
       _selectedSession = session;
@@ -62,7 +75,6 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     });
   }
 
-  // YENİ FONKSİYON: Tüm öğrencileri "geldi" olarak işaretler
   void _markAllPresent() {
     setState(() {
       for (var student in _students) {
@@ -96,6 +108,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Yoklama Al'),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _selectedSession == null
@@ -106,35 +121,21 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
 
   Widget _buildSessionSelection() {
     final String formattedDate = DateFormat.yMMMMd('tr_TR').format(DateTime.now());
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            Icons.checklist_rtl_outlined,
-            size: 80,
-            color: Theme.of(context).primaryColor.withOpacity(0.5),
-          ),
+          Icon(Icons.checklist_rtl_outlined, size: 80, color: Theme.of(context).primaryColor.withOpacity(0.5)),
           const SizedBox(height: 16),
-          Text(
-            'Yoklama Oturumları',
-            style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Lütfen yoklama alınacak oturumu seçin.',
-            style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade600),
-          ),
+          Text('Yoklama Oturumları', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold)),
+          Text('Lütfen yoklama alınacak oturumu seçin.', style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade600)),
           const SizedBox(height: 24),
           Card(
             elevation: 2,
             child: ListTile(
               leading: const Icon(Icons.calendar_today),
-              title: Text(
-                'Bugünün Tarihi: $formattedDate',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
+              title: Text('Bugünün Tarihi: $formattedDate', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
             ),
           ),
           const SizedBox(height: 20),
@@ -156,34 +157,20 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     );
   }
 
-  // GÜNCELLENMİŞ WİDGET: "Tümünü Var Yap" butonu eklendi
   Widget _buildAttendanceList() {
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => _selectedSession = null),
-              ),
-              Text(
-                _selectedSession!,
-                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              TextButton(
-                onPressed: _markAllPresent,
-                child: Text(
-                  'Tümünü Var Yap',
-                  style: GoogleFonts.poppins(color: Theme.of(context).primaryColor),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: _saveAttendance,
-                child: const Text('Kaydet'),
-              ),
+              IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _selectedSession = null)),
+              const SizedBox(width: 16),
+              Text(_getAbbreviatedSession(_selectedSession), style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.done_all), tooltip: 'Tümünü Var Yap', onPressed: _markAllPresent, color: Theme.of(context).primaryColor),
+              const SizedBox(width: 8),
+              ElevatedButton(onPressed: _saveAttendance, child: const Text('Kaydet')),
             ],
           ),
         ),
@@ -212,14 +199,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
                       ),
                       Row(
                         children: [
-                          IconButton(
-                            icon: Icon(Icons.check_circle, color: status == 'geldi' ? Colors.green : Colors.grey),
-                            onPressed: () => _markAttendance(studentId, 'geldi'),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.cancel, color: status == 'gelmedi' ? Colors.red : Colors.grey),
-                            onPressed: () => _markAttendance(studentId, 'gelmedi'),
-                          ),
+                          IconButton(icon: Icon(Icons.check_circle, color: status == 'geldi' ? Colors.green : Colors.grey), onPressed: () => _markAttendance(studentId, 'geldi')),
+                          IconButton(icon: Icon(Icons.cancel, color: status == 'gelmedi' ? Colors.red : Colors.grey), onPressed: () => _markAttendance(studentId, 'gelmedi')),
                         ],
                       ),
                     ],
