@@ -34,7 +34,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   final Map<String, Map<String, List<Map<String, dynamic>>>> _selectedTopicsByBook = {};
   final Map<String, int> _etutCounts = {};
   final Map<String, TextEditingController> _endPageControllers = {};
-  final List<TextEditingController> _digitalEtutControllers = List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _digitalEtutControllers = List.generate(50, (_) => TextEditingController());
   bool _isSaving = false;
 
   late PageController _pageController;
@@ -45,9 +45,14 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   Map<String, int>? _firstSelectedItem;
 
   // --- Sabit Listeler ve Zaman Dilimleri ---
+  final Map<String, String> _subjectTypes = {
+    'Türkçe': 'Sözel', 'Edebiyat': 'Sözel', 'Tarih': 'Sözel', 'Tarih-1': 'Sözel', 'Tarih-2': 'Sözel',
+    'Coğrafya': 'Sözel', 'Coğrafya-1': 'Sözel', 'Coğrafya-2': 'Sözel', 'Felsefe': 'Sözel', 'Felsefe Grubu': 'Sözel', 'Din Kültürü': 'Sözel',
+    'Matematik': 'Sayısal', 'Fizik': 'Sayısal', 'Kimya': 'Sayısal', 'Biyoloji': 'Sayısal'
+  };
   final List<String> _tytSubjects = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü'];
   final List<String> _aytSubjects = ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Edebiyat', 'Tarih-1', 'Coğrafya-1', 'Tarih-2', 'Coğrafya-2', 'Felsefe Grubu'];
-  final List<String> _days = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+  final List<String> _daysOfWeek = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
   final List<String> _weekdayTimes = ['09:00\n09:40', '09:50\n10:30', '10:40\n11:20', '11:30\n12:10', '13:30\n14:10', '14:20\n15:00', '15:10\n15:50', '16:00\n16:40', '16:50\n17:30', '17:40\n18:20'];
   final List<String> _saturdayTimes = ['13:30\n14:10', '14:20\n15:00', '15:20\n16:10', '16:20\n17:10', '17:20\n18:10'];
 
@@ -262,9 +267,12 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
 
   Widget _buildEtutSelection() {
     final allItems = _getAllSelectedItemsForEtut();
+    final etutCounts = _calculateEtutCounts(_selectedDateRange);
+    final totalAcademicSlots = etutCounts['academic']!;
     int totalEtutCount = _etutCounts.values.fold(0, (sum, count) => sum + count);
+
     return Column(children: [
-      Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Atanan Ödev Etütü: $totalEtutCount / 49', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: totalEtutCount == 49 ? Colors.green : Colors.black))),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Atanan Ödev Etütü: $totalEtutCount / $totalAcademicSlots', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: totalEtutCount == totalAcademicSlots ? Colors.green : Colors.black))),
       Expanded(child: ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 8), itemCount: allItems.length, itemBuilder: (context, index) {
         final item = allItems[index];
         final uniqueId = item['id'] as String;
@@ -288,32 +296,39 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
           ));
         }
       })),
-      _buildStepNavigationBar(onNextPressed: totalEtutCount == 49 ? () => setState(() => _currentStep = 8) : null),
+      _buildStepNavigationBar(onNextPressed: totalEtutCount == totalAcademicSlots ? () => setState(() => _currentStep = 8) : null),
     ]);
   }
 
   Widget _buildDigitalEtutSelection() {
-    final filledCount = _digitalEtutControllers.where((c) => c.text.trim().isNotEmpty).length;
+    final etutCounts = _calculateEtutCounts(_selectedDateRange);
+    final totalDigitalSlots = etutCounts['digital']!;
+    final filledCount = _digitalEtutControllers.sublist(0, totalDigitalSlots).where((c) => c.text.trim().isNotEmpty).length;
+
     return Column(children: [
-      Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Atanan Dijital Etüt: $filledCount / 6', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: filledCount == 6 ? Colors.green : Colors.black))),
-      Expanded(child: ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: 6, itemBuilder: (context, index) {
+      Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text('Atanan Dijital Etüt: $filledCount / $totalDigitalSlots', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: filledCount == totalDigitalSlots ? Colors.green : Colors.black))),
+      Expanded(child: ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: totalDigitalSlots, itemBuilder: (context, index) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: TextFormField(
             controller: _digitalEtutControllers[index],
-            decoration: InputDecoration(labelText: '${_days[index]} Dijital Etüt Görevi', hintText: 'Örn: EBA Videoları, Test-3 Çözümleri', border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+            decoration: InputDecoration(labelText: '${_getWeekdayNameForIndex(index)} Dijital Etüt Görevi', hintText: 'Örn: EBA Videoları, Test-3 Çözümleri', border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
             onChanged: (text) => setState(() {}),
           ),
         );
       })),
-      _buildStepNavigationBar(onNextPressed: filledCount == 6 ? () => setState(() => _currentStep = 9) : null),
+      _buildStepNavigationBar(onNextPressed: filledCount == totalDigitalSlots ? () => setState(() => _currentStep = 9) : null),
     ]);
   }
 
   Widget _buildSummary() {
     final studentData = _selectedStudent!.data() as Map<String, dynamic>;
     final academicHomeworks = _getAllSelectedItemsForEtut();
-    final digitalHomeworks = _digitalEtutControllers.asMap().entries.map((entry) => {'day': _days[entry.key], 'task': entry.value.text}).toList();
+    final etutCounts = _calculateEtutCounts(_selectedDateRange);
+    final digitalHomeworks = _digitalEtutControllers.asMap().entries.where((entry) => entry.key < etutCounts['digital']!).map((entry) {
+      return {'day': _getWeekdayNameForIndex(entry.key), 'task': entry.value.text};
+    }).toList();
+
     return Column(children: [
       Expanded(child: ListView(padding: const EdgeInsets.all(16.0), children: [
         Text('Program Özeti', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
@@ -323,11 +338,11 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
           _buildSummaryItem(Icons.date_range_outlined, 'Tarih Aralığı', '${DateFormat.yMMMMd('tr_TR').format(_selectedDateRange!.start)} - ${DateFormat.yMMMMd('tr_TR').format(_selectedDateRange!.end)}'),
         ]))),
         const SizedBox(height: 24),
-        Text('Akademik Ödevler (49 Etüt)', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+        Text('Akademik Ödevler (${etutCounts['academic']} Etüt)', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         ...academicHomeworks.map((item) => _buildHomeworkSummaryTile(item)),
         const SizedBox(height: 24),
-        Text('Dijital Etütler (6 Etüt)', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+        Text('Dijital Etütler (${etutCounts['digital']} Etüt)', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         ...digitalHomeworks.map((item) => _buildDigitalSummaryTile(item)),
       ])),
@@ -391,11 +406,52 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   void _generateAndSetInitialSchedule() {
     List<ScheduleTask> academicTasks = [];
     _getAllSelectedItemsForEtut().forEach((item) {
-      final etutCount = _etutCounts[item['id'] as String] ?? 1;
-      for (int i = 0; i < etutCount; i++) { academicTasks.add(ScheduleTask(data: item)); }
+      final uniqueId = item['id'] as String;
+      int etutCount = _etutCounts[uniqueId] ?? 1;
+
+      var baseData = Map<String, dynamic>.from(item);
+      final subjectUniqueId = baseData['subject'] as String;
+      final subjectCleanName = subjectUniqueId.split('-').last;
+      baseData['discipline'] = _subjectTypes[subjectCleanName];
+
+      if (item['type'] == 'topic') {
+        final endPageStr = _endPageControllers[uniqueId]?.text.trim() ?? '';
+        final startPage = int.tryParse(item['sayfa'].toString());
+        final endPage = int.tryParse(endPageStr);
+
+        if (startPage != null && endPage != null && endPage > startPage && etutCount > 1) {
+          final totalPages = endPage - startPage;
+          final pagesPerEtut = (totalPages / etutCount).ceil();
+          for (int i = 0; i < etutCount; i++) {
+            final chunkStartPage = startPage + (i * pagesPerEtut);
+            final chunkEndPage = min(chunkStartPage + pagesPerEtut, endPage);
+            var chunkData = Map<String, dynamic>.from(baseData);
+            chunkData['isChunked'] = true;
+            chunkData['chunkIndex'] = i + 1;
+            chunkData['chunkTotal'] = etutCount;
+            chunkData['chunkPageRange'] = '$chunkStartPage-$chunkEndPage';
+            academicTasks.add(ScheduleTask(data: chunkData));
+          }
+        } else {
+          for (int i = 0; i < etutCount; i++) { academicTasks.add(ScheduleTask(data: baseData)); }
+        }
+      } else {
+        for (int i = 0; i < etutCount; i++) { academicTasks.add(ScheduleTask(data: baseData)); }
+      }
     });
-    academicTasks.shuffle();
-    final List<ScheduleTask> digitalTasks = _digitalEtutControllers.map((controller) => ScheduleTask(data: {'type': 'digital', 'task': controller.text})).toList();
+
+    final Map<int, ScheduleTask> digitalTasksByWeekday = {};
+    int digitalDayIndex = 0;
+    for (int i = 0; i <= _selectedDateRange!.duration.inDays; i++) {
+      final day = _selectedDateRange!.start.add(Duration(days: i));
+      if (day.weekday != DateTime.sunday) {
+        if(digitalDayIndex < _digitalEtutControllers.length){
+          digitalTasksByWeekday[day.weekday] = ScheduleTask(data: {'type': 'digital', 'task': _digitalEtutControllers[digitalDayIndex].text});
+          digitalDayIndex++;
+        }
+      }
+    }
+
     List<ScheduleDay> newSchedule = [];
     final totalDays = _selectedDateRange!.duration.inDays + 1;
     for (int i = 0; i < totalDays; i++) {
@@ -405,19 +461,92 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
         dayTasks.add(ScheduleTask(data: {'type': 'fixed', 'title': 'Genel Deneme'}));
       } else if (currentDate.weekday == DateTime.saturday) {
         dayTasks.add(ScheduleTask(data: {'type': 'fixed', 'title': 'TYT Denemesi'}));
-        for (int j = 0; j < _saturdayTimes.length; j++) {
-          final task = digitalTasks.isNotEmpty ? digitalTasks.removeAt(0) : (academicTasks.isNotEmpty ? academicTasks.removeAt(0) : null);
-          dayTasks.add(task);
-        }
+        dayTasks.addAll(List.generate(5, (_) => null));
       } else {
-        for (int j = 0; j < _weekdayTimes.length; j++) {
-          final task = digitalTasks.isNotEmpty ? digitalTasks.removeAt(0) : (academicTasks.isNotEmpty ? academicTasks.removeAt(0) : null);
-          dayTasks.add(task);
-        }
+        dayTasks.addAll(List.generate(10, (_) => null));
       }
       newSchedule.add(ScheduleDay(date: currentDate, tasks: dayTasks));
     }
+
+    List<ScheduleTask> unplacedTasks = List.from(academicTasks);
+    // Dijital görevleri öncelikli yerleştir
+    for (var day in newSchedule) {
+      if (digitalTasksByWeekday.containsKey(day.date.weekday)) {
+        final firstEmptySlot = day.tasks.indexWhere((task) => task == null);
+        if (firstEmptySlot != -1) {
+          day.tasks[firstEmptySlot] = digitalTasksByWeekday[day.date.weekday];
+        }
+      }
+    }
+
+    // Akademik görevleri puanlayarak yerleştir
+    for (int dayIndex = 0; dayIndex < newSchedule.length; dayIndex++) {
+      final day = newSchedule[dayIndex];
+      for (int taskIndex = 0; taskIndex < day.tasks.length; taskIndex++) {
+        if (day.tasks[taskIndex] == null && unplacedTasks.isNotEmpty) {
+          unplacedTasks.sort((a, b) {
+            final scoreA = _calculatePlacementScore(a, newSchedule, dayIndex, taskIndex);
+            final scoreB = _calculatePlacementScore(b, newSchedule, dayIndex, taskIndex);
+            return scoreB.compareTo(scoreA); // En yüksek puanlı olanı başa al
+          });
+
+          final bestTask = unplacedTasks.first;
+          day.tasks[taskIndex] = bestTask;
+          unplacedTasks.remove(bestTask);
+        }
+      }
+    }
+
     setState(() => _finalSchedule = newSchedule);
+  }
+
+  double _calculatePlacementScore(ScheduleTask task, List<ScheduleDay> schedule, int dayIndex, int taskIndex) {
+    double score = 100.0;
+    final taskData = task.data;
+    if (taskData['subject'] == null) return score + Random().nextDouble();
+
+    final taskSubjectUniqueId = taskData['subject'] as String;
+    final taskSubject = taskSubjectUniqueId.split('-').last;
+    final taskDiscipline = _subjectTypes[taskSubject];
+
+    if (taskData['isChunked'] == true && taskData['chunkIndex'] > 1) {
+      bool previousPartPlaced = false;
+      for (int d = 0; d < schedule.length; d++) {
+        for (int t = 0; t < schedule[d].tasks.length; t++) {
+          final existingTask = schedule[d].tasks[t];
+          if (d < dayIndex || (d == dayIndex && t < taskIndex)) {
+            if (existingTask != null && existingTask.data['isChunked'] == true && existingTask.data['konu'] == taskData['konu'] && existingTask.data['chunkIndex'] == taskData['chunkIndex'] - 1) {
+              previousPartPlaced = true;
+              break;
+            }
+          }
+        }
+        if (previousPartPlaced) break;
+      }
+      if (!previousPartPlaced) return -double.infinity;
+    }
+
+    ScheduleTask? previousTask;
+    if (taskIndex > 0) {
+      previousTask = schedule[dayIndex].tasks[taskIndex - 1];
+    } else if (dayIndex > 0) {
+      previousTask = schedule[dayIndex - 1].tasks.lastWhere((t) => t != null, orElse: () => null);
+    }
+
+    if (previousTask != null && (previousTask.data['type'] == 'topic' || previousTask.data['type'] == 'practice')) {
+      final prevData = previousTask.data;
+      final prevSubjectRaw = prevData['subject'] as String?;
+      if (prevSubjectRaw != null) {
+        final prevSubject = prevSubjectRaw.split('-').last;
+        final prevDiscipline = _subjectTypes[prevSubject];
+        if (taskData['isChunked'] == true && prevData['isChunked'] == true && prevData['konu'] == taskData['konu']) { score -= 80; }
+        if (prevDiscipline == taskDiscipline) { score -= 30; }
+        if (prevSubjectRaw == taskSubjectUniqueId) { score -= 20; }
+        if (prevData['bookPublisher'] != null && prevData['bookPublisher'] == taskData['bookPublisher']) { score -= 10; }
+      }
+    }
+
+    return score + Random().nextDouble();
   }
 
   Future<void> _saveProgram() async {
@@ -475,6 +604,8 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     setState(() {
       final taskA = _finalSchedule[dayIndexA].tasks[taskIndexA];
       final taskB = _finalSchedule[dayIndexB].tasks[taskIndexB];
+      if(taskA?.data['type'] == 'fixed' || taskB?.data['type'] == 'fixed') return;
+
       _finalSchedule[dayIndexA].tasks[taskIndexA] = taskB;
       _finalSchedule[dayIndexB].tasks[taskIndexB] = taskA;
       _cancelSwap();
@@ -488,12 +619,49 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     });
   }
 
+  Map<String, int> _calculateEtutCounts(DateTimeRange? range) {
+    if (range == null) return {'academic': 0, 'digital': 0};
+    int academic = 0;
+    int digital = 0;
+    for (int i = 0; i <= range.duration.inDays; i++) {
+      final day = range.start.add(Duration(days: i));
+      if (day.weekday == DateTime.saturday) {
+        academic += 4;
+        digital += 1;
+      } else if (day.weekday != DateTime.sunday) {
+        academic += 9;
+        digital += 1;
+      }
+    }
+    return {'academic': academic, 'digital': digital};
+  }
+
+  String _getWeekdayNameForIndex(int index) {
+    if (_selectedDateRange == null) return '';
+    final validDays = <String>[];
+    for (int i = 0; i <= _selectedDateRange!.duration.inDays; i++) {
+      final day = _selectedDateRange!.start.add(Duration(days: i));
+      if (day.weekday != DateTime.sunday) {
+        validDays.add(_daysOfWeek[day.weekday - 1]);
+      }
+    }
+    if (index >= validDays.length) return '';
+    return validDays[index];
+  }
+
   Widget _buildTaskTile(String time, ScheduleTask? task) {
     if (task == null) return _buildEmptyTaskTile(time);
     if (task.data['type'] == 'fixed') return _buildFixedTaskTile(time, task.data['title']);
     final bool isDigital = task.data['type'] == 'digital';
     String title = isDigital ? 'Dijital Etüt' : '${(task.data['subject'] as String).split('-').last}: ${task.data['publisher'] ?? task.data['bookPublisher']}';
-    String subtitle = isDigital ? task.data['task'] : '${task.data['konu'] ?? 'Deneme'}';
+
+    String subtitle;
+    if(task.data['isChunked'] == true) {
+      subtitle = '${task.data['konu']} (Sayfa: ${task.data['chunkPageRange']})';
+    } else {
+      subtitle = isDigital ? task.data['task'] : '${task.data['konu'] ?? 'Deneme'}';
+    }
+
     return Card(elevation: 2, child: ListTile(
       leading: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Text(time.split('\n')[0], style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -501,7 +669,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
         Text(time.split('\n')[1], style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
       ]),
       title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-      subtitle: Text(subtitle, style: GoogleFonts.poppins(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(subtitle, style: GoogleFonts.poppins(fontSize: 12)),
     ));
   }
 
@@ -520,7 +688,6 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     return Card(color: Colors.grey.shade300, elevation: 1, child: ListTile(
       leading: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(time, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12))]),
       title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14)),
-      leadingAndTrailingTextStyle: const TextStyle(height: 1),
     ));
   }
 
@@ -548,11 +715,18 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
 
   String _getTimeForSlot(DateTime date, int slotIndex) {
     if (date.weekday == DateTime.sunday) return "Tüm Gün";
+    final tasksOnDay = _finalSchedule.firstWhere((day) => day.date.year == date.year && day.date.month == date.month && day.date.day == date.day).tasks;
+    final fixedTasksCount = tasksOnDay.where((task) => task?.data['type'] == 'fixed').length;
+
     if (date.weekday == DateTime.saturday) {
-      if (slotIndex == 0) return "09:00\n12:10";
-      return _saturdayTimes[slotIndex - 1];
+      if (slotIndex < fixedTasksCount) return "09:00\n12:10";
+      return _saturdayTimes[slotIndex - fixedTasksCount];
     }
-    return _weekdayTimes[slotIndex];
+
+    if (slotIndex < _weekdayTimes.length) {
+      return _weekdayTimes[slotIndex];
+    }
+    return "";
   }
 
   Widget _buildStepNavigationBar({required VoidCallback? onNextPressed, String buttonText = 'Devam Et', IconData icon = Icons.arrow_forward_ios}) { return Padding(padding: const EdgeInsets.all(16.0), child: ElevatedButton.icon(style: _getPrimaryButtonStyle(fullWidth: true), onPressed: onNextPressed, icon: _isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Icon(icon, size: 16), label: Text(buttonText, style: GoogleFonts.poppins(fontSize: 16)))); }
