@@ -1,8 +1,9 @@
+// lib/pages/mentor/student_list_page.dart
+
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:metabilim/pages/mentor/student_detail_page.dart'; // YENİ: Detay sayfasını import ediyoruz
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'student_status_tile.dart'; // YENİ: Akıllı kart widget'ını import ediyoruz
 
 class StudentListPage extends StatefulWidget {
   const StudentListPage({super.key});
@@ -12,66 +13,88 @@ class StudentListPage extends StatefulWidget {
 }
 
 class _StudentListPageState extends State<StudentListPage> {
-  final Stream<QuerySnapshot> _studentsStream = FirebaseFirestore.instance
+  final Stream<QuerySnapshot> _allStudentsStream = FirebaseFirestore.instance
       .collection('users')
       .where('role', isEqualTo: 'Ogrenci')
       .snapshots();
 
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _studentsStream,
-      builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
-        if (snapshot.hasError) {
-          return const Center(child: Text('Bir hata oluştu.'));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('Sistemde kayıtlı öğrenci bulunmuyor.'));
-        }
+    return Column(
+      children: [
+        // YENİ: Arama Çubuğu
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Öğrenci Ara...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _searchController.clear())
+                  : null,
+            ),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _allStudentsStream,
+            builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+              if (snapshot.hasError) {
+                return const Center(child: Text('Bir hata oluştu.'));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.data!.docs.isEmpty) {
+                return const Center(child: Text('Sistemde kayıtlı öğrenci bulunmuyor.'));
+              }
 
-        return ListView(
-          padding: const EdgeInsets.all(8.0),
-          children: snapshot.data!.docs.map((DocumentSnapshot document) {
-            Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
-            String studentName = '${data['name']} ${data['surname']}';
-            String studentNumber = data['number'] ?? 'Numara Yok';
+              // Arama filtresini uygula
+              var students = snapshot.data!.docs.where((doc) {
+                if (_searchQuery.isEmpty) return true;
+                final data = doc.data() as Map<String, dynamic>;
+                final fullName = '${data['name']} ${data['surname']}'.toLowerCase();
+                return fullName.contains(_searchQuery);
+              }).toList();
 
-            return Card(
-              elevation: 3,
-              margin: const EdgeInsets.symmetric(vertical: 6.0),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  child: Text(
-                      data['name'] != null && data['name'].isNotEmpty ? data['name'][0] : 'Ö',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                  ),
-                ),
-                title: Text(studentName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                subtitle: Text('Numara: $studentNumber'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              if (students.isEmpty) {
+                return const Center(child: Text('Arama kriterlerine uyan öğrenci bulunamadı.'));
+              }
 
-                // DEĞİŞİKLİK BURADA: Artık detay sayfasına yönlendiriyoruz
-                onTap: () {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => StudentDetailPage(
-                            studentId: document.id, // Öğrencinin benzersiz ID'si
-                            studentName: studentName, // Öğrencinin tam adı
-                          )
-                      )
-                  );
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                itemCount: students.length,
+                itemBuilder: (context, index) {
+                  // YENİ: Artık her öğrenci için akıllı bir kart oluşturuyoruz
+                  return StudentStatusTile(studentDoc: students[index]);
                 },
-              ),
-            );
-          }).toList(),
-        );
-      },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

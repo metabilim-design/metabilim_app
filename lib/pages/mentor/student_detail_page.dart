@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:metabilim/pages/mentor/homework_check_page.dart';
+import 'package:metabilim/pages/mentor/student_attendance_page.dart';
+import 'package:metabilim/pages/mentor/student_schedule_page.dart';
 
 class StudentDetailPage extends StatelessWidget {
   final String studentId;
@@ -30,8 +33,15 @@ class StudentDetailPage extends StatelessWidget {
             icon: Icons.calendar_month_outlined,
             label: 'Öğrenci Programı',
             onTap: () {
-              // TODO: Öğrenci programı sayfası açılacak
-              print('Öğrenci Programı tıklandı');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StudentSchedulePage(
+                    studentId: studentId,
+                    studentName: studentName,
+                  ),
+                ),
+              );
             },
           ),
           _buildFeatureCard(
@@ -39,8 +49,15 @@ class StudentDetailPage extends StatelessWidget {
             icon: Icons.fact_check_outlined,
             label: 'Yoklama Durumu',
             onTap: () {
-              // TODO: Yoklama durumu sayfası açılacak
-              print('Yoklama Durumu tıklandı');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StudentAttendancePage(
+                    studentId: studentId,
+                    studentName: studentName,
+                  ),
+                ),
+              );
             },
           ),
           _buildFeatureCard(
@@ -57,8 +74,15 @@ class StudentDetailPage extends StatelessWidget {
             icon: Icons.edit_note_outlined,
             label: 'Ödev Kontrol',
             onTap: () {
-              // TODO: Ödev kontrol sayfası açılacak
-              print('Ödev Kontrol tıklandı');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => HomeworkCheckPage(
+                    studentId: studentId,
+                    studentName: studentName,
+                  ),
+                ),
+              );
             },
           ),
         ],
