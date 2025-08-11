@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:metabilim/auth_service.dart';
-import 'package:metabilim/register_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // Gerekli Shell (Ana İskelet) sayfalarını import ediyoruz
 import 'package:metabilim/student_shell.dart';
 import 'package:metabilim/mentor_shell.dart';
+import 'package:metabilim/admin_shell.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -37,38 +37,24 @@ class _LoginPageState extends State<LoginPage> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      String identifier = _identifierController.text;
-      String password = _passwordController.text;
-
-      if (_selectedRole == 'Admin' && identifier == 'admin' && password == 'admin') {
-        _showFeedback('Admin girişi başarılı!');
-        // TODO: Admin paneline yönlendir
-        setState(() => _isLoading = false);
-        return;
-      }
-
       var result = await _authService.signIn(
-        identifier: identifier,
-        password: password,
+        identifier: _identifierController.text.trim(),
+        password: _passwordController.text.trim(),
         role: _selectedRole,
       );
 
-      if (!mounted) return; // Sayfa aktif değilse devam etme
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (result['success']) {
         _showFeedback('${result['role']} olarak giriş yapıldı.');
 
         if (result['role'] == 'Ogrenci') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const StudentShell()),
-          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StudentShell()));
         } else if (result['role'] == 'Mentor') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MentorShell()),
-          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MentorShell()));
+        } else if (result['role'] == 'Admin') {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminShell()));
         }
       } else {
         _showFeedback(result['message'], isError: true);
@@ -123,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 20),
                     TextFormField(
                       controller: _passwordController,
-                      decoration: const InputDecoration(labelText: 'Şifre', border: const OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Şifre', border: OutlineInputBorder()),
                       obscureText: true,
                       validator: (value) => value!.isEmpty ? 'Şifre boş olamaz' : null,
                     ),
@@ -139,10 +125,7 @@ class _LoginPageState extends State<LoginPage> {
                       onPressed: _login,
                       child: Text('Giriş Yap', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
-                    TextButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterPage())),
-                      child: Text('Hesabın yok mu? Kayıt Ol', style: GoogleFonts.poppins(color: const Color(0xFF00A99D))),
-                    )
+                    // "Kayıt Ol" butonu ve ilgili import kaldırıldı.
                   ],
                 ),
               ),

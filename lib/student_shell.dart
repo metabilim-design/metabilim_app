@@ -58,15 +58,15 @@ class _StudentShellState extends State<StudentShell> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.edit_note_outlined),
-            label: 'Ödevlerim',
+            label: 'Ödevler',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart_outlined),
-            label: 'Denemelerim',
+            label: 'Denemeler',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.check_circle_outline),
-            label: 'Yoklamalarım',
+            label: 'Yoklamalar',
           ),
         ],
         currentIndex: _selectedIndex,

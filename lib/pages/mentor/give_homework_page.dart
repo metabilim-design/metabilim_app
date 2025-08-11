@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:rxdart/rxdart.dart';
 import 'dart:math';
+import 'package:collection/collection.dart';
 
 // --- YARDIMCI SINIFLAR ---
 class ScheduleTask {
@@ -44,6 +45,9 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   bool _isSwapMode = false;
   Map<String, int>? _firstSelectedItem;
 
+  final TextEditingController _materialSearchController = TextEditingController();
+  String _materialSearchQuery = '';
+
   // --- Sabit Listeler ve Zaman Dilimleri ---
   final Map<String, String> _subjectTypes = {
     'Türkçe': 'Sözel', 'Edebiyat': 'Sözel', 'Tarih': 'Sözel', 'Tarih-1': 'Sözel', 'Tarih-2': 'Sözel',
@@ -60,6 +64,13 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
   void initState() {
     super.initState();
     _pageController = PageController();
+    _materialSearchController.addListener(() {
+      if(mounted) {
+        setState(() {
+          _materialSearchQuery = _materialSearchController.text;
+        });
+      }
+    });
   }
 
   @override
@@ -67,6 +78,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     for (var controller in _endPageControllers.values) { controller.dispose(); }
     for (var controller in _digitalEtutControllers) { controller.dispose(); }
     _pageController.dispose();
+    _materialSearchController.dispose();
     super.dispose();
   }
 
@@ -189,18 +201,44 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     final practicesStream = FirebaseFirestore.instance.collection('practices').where('subject', whereIn: cleanSubjectNames).snapshots();
     final combinedStream = Rx.combineLatest2(booksStream, practicesStream, (QuerySnapshot books, QuerySnapshot practices) => [...books.docs, ...practices.docs]);
     return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: TextField(
+          controller: _materialSearchController,
+          decoration: InputDecoration(
+            hintText: 'Yayınevi ara...',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            suffixIcon: _materialSearchQuery.isNotEmpty
+                ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _materialSearchController.clear())
+                : null,
+          ),
+        ),
+      ),
       Expanded(child: StreamBuilder<List<DocumentSnapshot>>(
         stream: combinedStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text('Seçilen derslere uygun materyal bulunamadı.', style: GoogleFonts.poppins()));
+          if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(child: Text('Materyal bulunamadı.', style: GoogleFonts.poppins()));
+
           final allMaterials = snapshot.data!;
-          final filteredMaterials = allMaterials.where((doc) {
+          var filteredMaterials = allMaterials.where((doc) {
             final data = doc.data() as Map<String, dynamic>?; if (data == null) return false;
             final level = data['level'] as String?; final subject = data['subject'] as String?; if (level == null || subject == null) return false;
             return _selectedSubjects.contains('$level-$subject');
           }).toList();
-          if (filteredMaterials.isEmpty) return Center(child: Text('Seçilen seviyeye uygun materyal bulunamadı.', style: GoogleFonts.poppins()));
+
+          if (_materialSearchQuery.isNotEmpty) {
+            filteredMaterials = filteredMaterials.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final publisher = (data['publisher'] as String?)?.toLowerCase() ?? '';
+              return publisher.contains(_materialSearchQuery.toLowerCase());
+            }).toList();
+          }
+
+          if (filteredMaterials.isEmpty) return Center(child: Text('Arama kriterlerine uygun materyal bulunamadı.', style: GoogleFonts.poppins()));
+
           return ListView.builder(padding: const EdgeInsets.all(8.0), itemCount: _selectedSubjects.length, itemBuilder: (context, index) {
             final subjectUniqueId = _selectedSubjects[index];
             final level = subjectUniqueId.split('-').first;
@@ -277,7 +315,15 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
         final item = allItems[index];
         final uniqueId = item['id'] as String;
         if (item['type'] == 'topic') {
-          _endPageControllers.putIfAbsent(uniqueId, () => TextEditingController());
+          final bookDoc = item['bookDoc'] as DocumentSnapshot;
+          final allTopicsInBook = List<Map<String, dynamic>>.from((bookDoc.data() as Map<String, dynamic>)['topics'] ?? []);
+          final currentTopicIndex = allTopicsInBook.indexWhere((t) => t['konu'] == item['konu']);
+          String defaultEndPage = '';
+          if (currentTopicIndex != -1 && currentTopicIndex < allTopicsInBook.length - 1) {
+            defaultEndPage = allTopicsInBook[currentTopicIndex + 1]['sayfa']?.toString() ?? '';
+          }
+          _endPageControllers.putIfAbsent(uniqueId, () => TextEditingController(text: defaultEndPage));
+
           return Card(margin: const EdgeInsets.symmetric(vertical: 6), child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${item['subject'].split('-').last} / ${item['bookPublisher']}', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
             Text(item['konu'], style: GoogleFonts.poppins(fontWeight: FontWeight.w600)), const SizedBox(height: 8),
@@ -378,18 +424,14 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
               final time = _getTimeForSlot(day.date, taskIndex);
               final task = day.tasks[taskIndex];
               final isSelectedForSwap = _isSwapMode && _firstSelectedItem?['dayIndex'] == dayIndex && _firstSelectedItem?['taskIndex'] == taskIndex;
-              return GestureDetector(
-                onDoubleTap: (task == null || task.data['type'] == 'fixed') ? null : () => _startSwap(dayIndex, taskIndex),
-                onTap: () => _performSwap(dayIndex, taskIndex),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isSelectedForSwap ? Colors.amber.shade700 : Colors.transparent, width: 3),
-                  ),
-                  child: _buildTaskTile(time, task),
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isSelectedForSwap ? Colors.amber.shade700 : Colors.transparent, width: 3),
                 ),
+                child: _buildTaskTile(time, task, dayIndex, taskIndex),
               );
             },
           );
@@ -469,7 +511,6 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     }
 
     List<ScheduleTask> unplacedTasks = List.from(academicTasks);
-    // Dijital görevleri öncelikli yerleştir
     for (var day in newSchedule) {
       if (digitalTasksByWeekday.containsKey(day.date.weekday)) {
         final firstEmptySlot = day.tasks.indexWhere((task) => task == null);
@@ -479,7 +520,6 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
       }
     }
 
-    // Akademik görevleri puanlayarak yerleştir
     for (int dayIndex = 0; dayIndex < newSchedule.length; dayIndex++) {
       final day = newSchedule[dayIndex];
       for (int taskIndex = 0; taskIndex < day.tasks.length; taskIndex++) {
@@ -487,7 +527,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
           unplacedTasks.sort((a, b) {
             final scoreA = _calculatePlacementScore(a, newSchedule, dayIndex, taskIndex);
             final scoreB = _calculatePlacementScore(b, newSchedule, dayIndex, taskIndex);
-            return scoreB.compareTo(scoreA); // En yüksek puanlı olanı başa al
+            return scoreB.compareTo(scoreA);
           });
 
           final bestTask = unplacedTasks.first;
@@ -649,8 +689,8 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     return validDays[index];
   }
 
-  Widget _buildTaskTile(String time, ScheduleTask? task) {
-    if (task == null) return _buildEmptyTaskTile(time);
+  Widget _buildTaskTile(String time, ScheduleTask? task, int dayIndex, int taskIndex) {
+    if (task == null) return _buildEmptyTaskTile(time, dayIndex, taskIndex);
     if (task.data['type'] == 'fixed') return _buildFixedTaskTile(time, task.data['title']);
     final bool isDigital = task.data['type'] == 'digital';
     String title = isDigital ? 'Dijital Etüt' : '${(task.data['subject'] as String).split('-').last}: ${task.data['publisher'] ?? task.data['bookPublisher']}';
@@ -670,10 +710,16 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
       ]),
       title: Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
       subtitle: Text(subtitle, style: GoogleFonts.poppins(fontSize: 12)),
+      trailing: IconButton(
+        icon: const Icon(Icons.swap_horiz, color: Colors.grey),
+        tooltip: 'Görevin yerini değiştir',
+        onPressed: () => _startSwap(dayIndex, taskIndex),
+      ),
+      onTap: () => _performSwap(dayIndex, taskIndex),
     ));
   }
 
-  Widget _buildEmptyTaskTile(String time) {
+  Widget _buildEmptyTaskTile(String time, int dayIndex, int taskIndex) {
     return Card(elevation: 0, color: Colors.grey.shade200, child: ListTile(
       leading: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Text(time.split('\n')[0], style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -681,6 +727,7 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
         Text(time.split('\n')[1], style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
       ]),
       title: Text('Boş Etüt', style: GoogleFonts.poppins(color: Colors.grey.shade700)),
+      onTap: () => _performSwap(dayIndex, taskIndex),
     ));
   }
 
@@ -698,10 +745,10 @@ class _GiveHomeworkPageState extends State<GiveHomeworkPage> {
     final List<Map<String, dynamic>> allItems = [];
     _selectedTopicsByBook.forEach((subjectUniqueId, books) {
       books.forEach((bookId, topics) {
-        DocumentSnapshot? bookDoc = _selectedBooksBySubject[subjectUniqueId]?.firstWhere((doc) => doc.id == bookId, orElse: () => null as DocumentSnapshot);
+        DocumentSnapshot? bookDoc = _selectedBooksBySubject[subjectUniqueId]?.firstWhereOrNull((doc) => doc.id == bookId);
         if (bookDoc == null) return;
         final bookData = bookDoc.data() as Map<String, dynamic>;
-        for (var topic in topics) { allItems.add({'type': 'topic', 'id': '$subjectUniqueId-$bookId-${topic['konu']}', 'subject': subjectUniqueId, 'bookPublisher': bookData['publisher'], 'bookType': bookData['bookType'], 'konu': topic['konu'], 'sayfa': topic['sayfa']}); }
+        for (var topic in topics) { allItems.add({'type': 'topic', 'id': '$subjectUniqueId-$bookId-${topic['konu']}', 'subject': subjectUniqueId, 'bookPublisher': bookData['publisher'], 'bookType': bookData['bookType'], 'konu': topic['konu'], 'sayfa': topic['sayfa'], 'bookDoc': bookDoc}); }
       });
     });
     _selectedPracticesBySubject.forEach((subjectUniqueId, practices) {
