@@ -1,8 +1,8 @@
 KAYIT İŞİ:
-	1)Eğitim koçu ve veli rolü eklenicek Muzo
-	2)Öğrencilere sınıf bilgisi atanıcak Muzo
-	3)Öğrenci eğitim koçu eşleştirmesi yapılıcak Muzo
-	4)Uygulamaya özel qr kod eklenicek  Muzo
+	1)Eğitim koçu ve veli rolü eklenicek //Muzo ++
+	2)Öğrencilere sınıf bilgisi atanıcak //Muzo ++
+	3)Öğrenci eğitim koçu eşleştirmesi yapılıcak //Muzo Admin panelindeki değişikliklerden sonra
+	4)Uygulamaya özel qr kod eklenicek  //Muzo uygulama bittikten sonra
 
 ARAYÜZ İŞİ:
 	1)Mentor:
@@ -20,7 +20,7 @@ ARAYÜZ İŞİ:
 		c)Bireyin dijital ve özel derslerini sabitleme
 		d)Eğitim koçunun altına öğrenciyi verme işini ayarlasın admin page
 	3)Eğitimsel koç:
-		a)Ödev verme sayfasını yükle sırtına Muzo
+		a)Ödev verme sayfasını yükle sırtına //Muzo ++
 
 ÖDEV VERME İŞİ:
 	1)Öğrenci seçme çok güzel

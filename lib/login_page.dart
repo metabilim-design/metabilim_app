@@ -7,6 +7,10 @@ import 'package:metabilim/student_shell.dart';
 import 'package:metabilim/mentor_shell.dart';
 import 'package:metabilim/admin_shell.dart';
 
+// YENİ: Bu dosyaları projenizde oluşturmanız gerekecek
+import 'package:metabilim/egitim_kocu_shell.dart';
+// import 'package:metabilim/veli_shell.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -49,12 +53,26 @@ class _LoginPageState extends State<LoginPage> {
       if (result['success']) {
         _showFeedback('${result['role']} olarak giriş yapıldı.');
 
-        if (result['role'] == 'Ogrenci') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StudentShell()));
-        } else if (result['role'] == 'Mentor') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MentorShell()));
-        } else if (result['role'] == 'Admin') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminShell()));
+        // GÜNCELLENDİ: Yeni roller için yönlendirme eklendi
+        switch (result['role']) {
+          case 'Ogrenci':
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StudentShell()));
+            break;
+          case 'Mentor':
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MentorShell()));
+            break;
+          case 'Admin':
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminShell()));
+            break;
+          case 'Eğitim Koçu':
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EgitimKocuShell()));
+            print('Eğitim Koçu Shell sayfasına yönlendirilecek.');
+            break;
+          case 'Veli':
+          // TODO: VeliShell sayfasını oluşturduktan sonra aşağıdaki yorumu kaldırın
+          // Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VeliShell()));
+            print('Veli Shell sayfasına yönlendirilecek.');
+            break;
         }
       } else {
         _showFeedback(result['message'], isError: true);
@@ -62,10 +80,13 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // GÜNCELLENDİ: Yeni roller için etiketler eklendi
   String getIdentifierLabel() {
     switch (_selectedRole) {
       case 'Ogrenci': return 'Okul Numarası';
       case 'Mentor': return 'Kullanıcı Adı';
+      case 'Eğitim Koçu': return 'Kullanıcı Adı';
+      case 'Veli': return 'Kullanıcı Adı';
       case 'Admin': return 'Admin Kullanıcı Adı';
       default: return 'Kimlik';
     }
@@ -90,12 +111,13 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Image.asset('assets/images/image_0d0f89.png', height: 120),
+                    Image.asset('assets/images/image_0d0f89.png', height: 120), // DOKUNULMADI
                     const SizedBox(height: 50),
+                    // GÜNCELLENDİ: Yeni roller dropdown'a eklendi
                     DropdownButtonFormField<String>(
                       value: _selectedRole,
                       decoration: const InputDecoration(labelText: 'Giriş Tipi', border: OutlineInputBorder()),
-                      items: ['Ogrenci', 'Mentor', 'Admin'].map((String value) {
+                      items: ['Ogrenci', 'Mentor', 'Eğitim Koçu', 'Veli', 'Admin'].map((String value) {
                         return DropdownMenuItem<String>(value: value, child: Text(value));
                       }).toList(),
                       onChanged: (newValue) => setState(() => _selectedRole = newValue!),
@@ -125,7 +147,6 @@ class _LoginPageState extends State<LoginPage> {
                       onPressed: _login,
                       child: Text('Giriş Yap', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
-                    // "Kayıt Ol" butonu ve ilgili import kaldırıldı.
                   ],
                 ),
               ),

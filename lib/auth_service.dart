@@ -17,43 +17,113 @@ class AuthService {
     }
   }
 
-  Future<String?> registerStudent({ required String name, required String surname, required String number, required String password, }) async {
+  Future<String?> registerStudent({
+    required String name,
+    required String surname,
+    required String number,
+    required String password,
+    required String studentClass,
+  }) async {
     String email = '$number@metabilim.app';
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       User? user = userCredential.user;
       if (user != null) {
-        await _firestore.collection('users').doc(user.uid).set({ 'name': name, 'surname': surname, 'number': number, 'email': email, 'role': 'Ogrenci', });
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': name, 'surname': surname, 'number': number,
+          'email': email, 'role': 'Ogrenci', 'class': studentClass,
+        });
         return null;
       }
     } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
-  Future<String?> registerMentor({ required String name, required String surname, required String username, required String password, }) async {
+  Future<String?> registerMentor({
+    required String name,
+    required String surname,
+    required String username,
+    required String password,
+  }) async {
     String email = '$username@metabilim.mentor';
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       User? user = userCredential.user;
       if (user != null) {
-        await _firestore.collection('users').doc(user.uid).set({ 'name': name, 'surname': surname, 'username': username, 'email': email, 'role': 'Mentor', });
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': name, 'surname': surname, 'username': username,
+          'email': email, 'role': 'Mentor',
+        });
         return null;
       }
     } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
-  Future<Map<String, dynamic>> signIn({ required String identifier, required String password, required String role, }) async {
-    String email;
-    if (role == 'Ogrenci') {
-      email = '$identifier@metabilim.app';
-    } else if (role == 'Mentor') { // else if olarak güncellendi
-      email = '$identifier@metabilim.mentor';
-    } else if (role == 'Admin') { // Admin rolü eklendi
-      email = '$identifier@metabilim.admin';
-    } else {
-      return {'success': false, 'message': 'Geçersiz rol seçimi.'};
+  Future<String?> registerCoach({
+    required String name,
+    required String surname,
+    required String username,
+    required String password,
+  }) async {
+    String email = '$username@metabilim.coach';
+    try {
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      User? user = userCredential.user;
+      if (user != null) {
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': name, 'surname': surname, 'username': username,
+          'email': email, 'role': 'Eğitim Koçu',
+        });
+        return null;
+      }
+    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    return 'Bilinmeyen bir hata oluştu.';
+  }
+
+  Future<String?> registerParent({
+    required String name,
+    required String surname,
+    required String username,
+    required String password,
+  }) async {
+    String email = '$username@metabilim.parent';
+    try {
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      User? user = userCredential.user;
+      if (user != null) {
+        await _firestore.collection('users').doc(user.uid).set({
+          'name': name, 'surname': surname, 'username': username,
+          'email': email, 'role': 'Veli',
+        });
+        return null;
+      }
+    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    return 'Bilinmeyen bir hata oluştu.';
+  }
+
+  // DÜZELTME BURADA: 'Admin' rolü eklendi
+  String _getEmailSuffixForRole(String role) {
+    switch (role) {
+      case 'Ogrenci': return '@metabilim.app';
+      case 'Mentor': return '@metabilim.mentor';
+      case 'Eğitim Koçu': return '@metabilim.coach';
+      case 'Veli': return '@metabilim.parent';
+      case 'Admin': return '@metabilim.admin'; // EKSİK OLAN SATIR BUYDU
+      default: return '';
     }
+  }
+
+  Future<Map<String, dynamic>> signIn({
+    required String identifier,
+    required String password,
+    required String role,
+  }) async {
+    String suffix = _getEmailSuffixForRole(role);
+    if (suffix.isEmpty) {
+      return {'success': false, 'message': 'Geçersiz rol belirtildi.'};
+    }
+    String email = '$identifier$suffix';
 
     try {
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
@@ -72,10 +142,15 @@ class AuthService {
     try {
       DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
       return doc.get('role');
-    } catch (e) { return null; }
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<String?> changePassword({ required String oldPassword, required String newPassword }) async {
+  Future<String?> changePassword({
+    required String oldPassword,
+    required String newPassword
+  }) async {
     User? user = _auth.currentUser;
     if (user != null && user.email != null) {
       try {

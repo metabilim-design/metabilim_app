@@ -18,6 +18,7 @@ class _AddUserPageState extends State<AddUserPage> {
   final _surnameController = TextEditingController();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _classController = TextEditingController(); // YENİ: Sınıf için controller
 
   String _selectedRole = 'Ogrenci';
   bool _isLoading = false;
@@ -28,6 +29,7 @@ class _AddUserPageState extends State<AddUserPage> {
     _surnameController.dispose();
     _identifierController.dispose();
     _passwordController.dispose();
+    _classController.dispose(); // YENİ
     super.dispose();
   }
 
@@ -38,20 +40,42 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _isLoading = true);
 
     String? error;
-    if (_selectedRole == 'Ogrenci') {
-      error = await _authService.registerStudent(
-        name: _nameController.text.trim(),
-        surname: _surnameController.text.trim(),
-        number: _identifierController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-    } else if (_selectedRole == 'Mentor') {
-      error = await _authService.registerMentor(
-        name: _nameController.text.trim(),
-        surname: _surnameController.text.trim(),
-        username: _identifierController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+
+    // Seçilen role göre doğru fonksiyonu çağır
+    switch (_selectedRole) {
+      case 'Ogrenci':
+        error = await _authService.registerStudent(
+          name: _nameController.text.trim(),
+          surname: _surnameController.text.trim(),
+          number: _identifierController.text.trim(),
+          password: _passwordController.text.trim(),
+          studentClass: _classController.text.trim(), // YENİ
+        );
+        break;
+      case 'Mentor':
+        error = await _authService.registerMentor(
+          name: _nameController.text.trim(),
+          surname: _surnameController.text.trim(),
+          username: _identifierController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        break;
+      case 'Eğitim Koçu': // YENİ
+        error = await _authService.registerCoach(
+          name: _nameController.text.trim(),
+          surname: _surnameController.text.trim(),
+          username: _identifierController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        break;
+      case 'Veli': // YENİ
+        error = await _authService.registerParent(
+          name: _nameController.text.trim(),
+          surname: _surnameController.text.trim(),
+          username: _identifierController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        break;
     }
 
     if (mounted) {
@@ -59,7 +83,7 @@ class _AddUserPageState extends State<AddUserPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Kullanıcı başarıyla oluşturuldu!'), backgroundColor: Colors.green),
         );
-        Navigator.pop(context); // Sayfayı kapat, listeleme ekranına dön
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Hata: $error'), backgroundColor: Colors.redAccent),
@@ -84,13 +108,21 @@ class _AddUserPageState extends State<AddUserPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // GÜNCELLENDİ: Dropdown menüye yeni roller eklendi
               DropdownButtonFormField<String>(
                 value: _selectedRole,
                 decoration: const InputDecoration(labelText: 'Kullanıcı Rolü', border: OutlineInputBorder()),
-                items: ['Ogrenci', 'Mentor'].map((String value) {
+                items: ['Ogrenci', 'Mentor', 'Eğitim Koçu', 'Veli'].map((String value) {
                   return DropdownMenuItem<String>(value: value, child: Text(value));
                 }).toList(),
-                onChanged: (newValue) => setState(() => _selectedRole = newValue!),
+                onChanged: (newValue) {
+                  setState(() {
+                    _selectedRole = newValue!;
+                    // Rol değiştiğinde controller'ları temizle ki karışıklık olmasın
+                    _identifierController.clear();
+                    _classController.clear();
+                  });
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -105,6 +137,18 @@ class _AddUserPageState extends State<AddUserPage> {
                 validator: (value) => value!.isEmpty ? 'Soyisim boş olamaz' : null,
               ),
               const SizedBox(height: 16),
+
+              // YENİ: Sadece öğrenci seçiliyse "Sınıf" alanını göster
+              if (isStudent)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: TextFormField(
+                    controller: _classController,
+                    decoration: const InputDecoration(labelText: 'Sınıf', border: OutlineInputBorder()),
+                    validator: (value) => value!.isEmpty ? 'Sınıf boş olamaz' : null,
+                  ),
+                ),
+
               TextFormField(
                 controller: _identifierController,
                 decoration: InputDecoration(labelText: isStudent ? 'Okul Numarası' : 'Kullanıcı Adı', border: const OutlineInputBorder()),
@@ -115,22 +159,22 @@ class _AddUserPageState extends State<AddUserPage> {
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Geçici Şifre', border: OutlineInputBorder()),
                 obscureText: true,
-                validator: (value) => value!.isEmpty ? 'Şifre boş olamaz' : null,
+                validator: (value) => value!.length < 6 ? 'Şifre en az 6 karakter olmalı' : null,
               ),
               const SizedBox(height: 24),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: _saveUser,
-                      icon: const Icon(Icons.person_add_alt_1_outlined),
-                      label: Text('Kullanıcıyı Kaydet', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _saveUser,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: Text('Kullanıcıyı Kaydet', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
         ),
