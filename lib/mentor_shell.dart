@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:metabilim/pages/mentor/student_list_page.dart';
 import 'package:metabilim/pages/mentor/book_list_page.dart';
-import 'package:metabilim/pages/mentor/give_homework_page.dart';
+import 'package:metabilim/pages/mentor/check_homework_page.dart';
 import 'package:metabilim/pages/mentor/take_attendance_page.dart';
 import 'package:metabilim/pages/mentor/profile_page.dart';
 
@@ -20,7 +20,7 @@ class _MentorShellState extends State<MentorShell> {
   static const List<Widget> _pages = <Widget>[
     StudentListPage(),      // Ana Sayfa -> Öğrenci Listesi
     BookListPage(),         // Kitap Listesi
-    GiveHomeworkPage(),     // Ödev Verme
+    CheckHomeworkPage(),     // Ödev Verme
     TakeAttendancePage(),   // Yoklama Alma
   ];
 
@@ -50,7 +50,7 @@ class _MentorShellState extends State<MentorShell> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Öğrenciler'),
           BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Kitaplar'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: 'Ödev Ver'),
+          BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: 'Ödev Kontrol'),
           BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Yoklama Al'),
         ],
         currentIndex: _selectedIndex,
