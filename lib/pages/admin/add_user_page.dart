@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:metabilim/auth_service.dart';
 
@@ -13,63 +14,90 @@ class _AddUserPageState extends State<AddUserPage> {
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
 
-  // Form controller'ları
+  // Controller'lar
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _classController = TextEditingController(); // YENİ: Sınıf için controller
 
   String _selectedRole = 'Ogrenci';
   bool _isLoading = false;
 
+  List<DocumentSnapshot> _coaches = [];
+  String? _selectedCoachId;
+
+  // YENİ: Veli-Öğrenci bağlantısı için
+  List<DocumentSnapshot> _students = [];
+  String? _selectedStudentId;
+
+  String? _selectedGrade;
+  String? _selectedBranch;
+
+  final List<String> _gradeLevels = ['9', '10', '11', '12', 'Mezun'];
+  final List<String> _branchLetters = List.generate(12, (index) => String.fromCharCode('A'.codeUnitAt(0) + index));
+
+
   @override
-  void dispose() {
-    _nameController.dispose();
-    _surnameController.dispose();
-    _identifierController.dispose();
-    _passwordController.dispose();
-    _classController.dispose(); // YENİ
-    super.dispose();
+  void initState() {
+    super.initState();
+    _fetchCoaches();
+    _fetchStudents(); // YENİ: Öğrencileri çek
   }
 
-  Future<void> _saveUser() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
+  Future<void> _fetchCoaches() async {
+    final snapshot = await FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Eğitim Koçu').get();
+    if (mounted) {
+      setState(() => _coaches = snapshot.docs);
     }
+  }
+
+  // YENİ: Tüm öğrencileri çeken fonksiyon
+  Future<void> _fetchStudents() async {
+    final snapshot = await FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Ogrenci').get();
+    if (mounted) {
+      setState(() => _students = snapshot.docs);
+    }
+  }
+
+
+  Future<void> _addUser() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    String? error;
+    String? result;
 
-    // Seçilen role göre doğru fonksiyonu çağır
-    switch (_selectedRole) {
+    switch(_selectedRole) {
       case 'Ogrenci':
-        error = await _authService.registerStudent(
+        final String className = '${_selectedGrade}-${_selectedBranch!}';
+        result = await _authService.registerStudent(
           name: _nameController.text.trim(),
           surname: _surnameController.text.trim(),
           number: _identifierController.text.trim(),
           password: _passwordController.text.trim(),
-          studentClass: _classController.text.trim(), // YENİ
+          className: className,
+          coachUid: _selectedCoachId,
+        );
+        break;
+      case 'Veli':
+      // YENİ: Veli kaydı için öğrenci ID'sini gönder
+        result = await _authService.registerParent(
+          name: _nameController.text.trim(),
+          surname: _surnameController.text.trim(),
+          username: _identifierController.text.trim(),
+          password: _passwordController.text.trim(),
+          studentUid: _selectedStudentId,
         );
         break;
       case 'Mentor':
-        error = await _authService.registerMentor(
+        result = await _authService.registerMentor(
           name: _nameController.text.trim(),
           surname: _surnameController.text.trim(),
           username: _identifierController.text.trim(),
           password: _passwordController.text.trim(),
         );
         break;
-      case 'Eğitim Koçu': // YENİ
-        error = await _authService.registerCoach(
-          name: _nameController.text.trim(),
-          surname: _surnameController.text.trim(),
-          username: _identifierController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        break;
-      case 'Veli': // YENİ
-        error = await _authService.registerParent(
+      case 'Eğitim Koçu':
+        result = await _authService.registerCoach(
           name: _nameController.text.trim(),
           surname: _surnameController.text.trim(),
           username: _identifierController.text.trim(),
@@ -78,29 +106,23 @@ class _AddUserPageState extends State<AddUserPage> {
         break;
     }
 
-    if (mounted) {
-      if (error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kullanıcı başarıyla oluşturuldu!'), backgroundColor: Colors.green),
-        );
+    if(mounted) {
+      setState(() => _isLoading = false);
+      if(result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kullanıcı başarıyla eklendi!'), backgroundColor: Colors.green));
         Navigator.pop(context);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $error'), backgroundColor: Colors.redAccent),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result), backgroundColor: Colors.red));
       }
-      setState(() => _isLoading = false);
     }
   }
 
+  // ... (dispose metodu aynı)
+
   @override
   Widget build(BuildContext context) {
-    bool isStudent = _selectedRole == 'Ogrenci';
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Yeni Kullanıcı Ekle', style: GoogleFonts.poppins()),
-      ),
+      appBar: AppBar(title: Text('Yeni Kullanıcı Ekle', style: GoogleFonts.poppins())),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -108,77 +130,115 @@ class _AddUserPageState extends State<AddUserPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // GÜNCELLENDİ: Dropdown menüye yeni roller eklendi
               DropdownButtonFormField<String>(
                 value: _selectedRole,
-                decoration: const InputDecoration(labelText: 'Kullanıcı Rolü', border: OutlineInputBorder()),
-                items: ['Ogrenci', 'Mentor', 'Eğitim Koçu', 'Veli'].map((String value) {
-                  return DropdownMenuItem<String>(value: value, child: Text(value));
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedRole = newValue!;
-                    // Rol değiştiğinde controller'ları temizle ki karışıklık olmasın
-                    _identifierController.clear();
-                    _classController.clear();
-                  });
+                items: ['Ogrenci', 'Veli', 'Mentor', 'Eğitim Koçu'] // Sıralama değiştirildi
+                    .map((role) => DropdownMenuItem(value: role, child: Text(role)))
+                    .toList(),
+                onChanged: (value) {
+                  if(value != null) setState(() => _selectedRole = value);
                 },
+                decoration: const InputDecoration(labelText: 'Kullanıcı Rolü', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'İsim', border: OutlineInputBorder()),
-                validator: (value) => value!.isEmpty ? 'İsim boş olamaz' : null,
-              ),
+              _buildTextField(_nameController, 'İsim'),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _surnameController,
-                decoration: const InputDecoration(labelText: 'Soyisim', border: OutlineInputBorder()),
-                validator: (value) => value!.isEmpty ? 'Soyisim boş olamaz' : null,
-              ),
+              _buildTextField(_surnameController, 'Soyisim'),
               const SizedBox(height: 16),
+              _buildTextField(_identifierController, _selectedRole == 'Ogrenci' ? 'Okul Numarası' : 'Kullanıcı Adı'),
+              const SizedBox(height: 16),
+              TextFormField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Şifre', border: OutlineInputBorder()), validator: (v) => v!.length < 6 ? 'Şifre en az 6 karakter olmalı' : null, obscureText: true),
 
-              // YENİ: Sadece öğrenci seçiliyse "Sınıf" alanını göster
-              if (isStudent)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: TextFormField(
-                    controller: _classController,
-                    decoration: const InputDecoration(labelText: 'Sınıf', border: OutlineInputBorder()),
-                    validator: (value) => value!.isEmpty ? 'Sınıf boş olamaz' : null,
-                  ),
-                ),
+              if (_selectedRole == 'Ogrenci') ..._buildStudentFields(),
+              if (_selectedRole == 'Veli') ..._buildParentFields(),
 
-              TextFormField(
-                controller: _identifierController,
-                decoration: InputDecoration(labelText: isStudent ? 'Okul Numarası' : 'Kullanıcı Adı', border: const OutlineInputBorder()),
-                validator: (value) => value!.isEmpty ? 'Bu alan boş olamaz' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Geçici Şifre', border: OutlineInputBorder()),
-                obscureText: true,
-                validator: (value) => value!.length < 6 ? 'Şifre en az 6 karakter olmalı' : null,
-              ),
               const SizedBox(height: 24),
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton.icon(
+              ElevatedButton(
+                onPressed: _isLoading ? null : _addUser,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
                 ),
-                onPressed: _saveUser,
-                icon: const Icon(Icons.person_add_alt_1_outlined),
-                label: Text('Kullanıcıyı Kaydet', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: _isLoading
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white))
+                    : Text('Kullanıcıyı Ekle', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // Öğrenciye özel alanları oluşturan fonksiyon
+  List<Widget> _buildStudentFields() {
+    return [
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _selectedGrade,
+              hint: const Text('Sınıf'),
+              items: _gradeLevels.map((grade) => DropdownMenuItem(value: grade, child: Text(grade))).toList(),
+              onChanged: (value) => setState(() => _selectedGrade = value),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              validator: (v) => v == null ? 'Zorunlu' : null,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _selectedBranch,
+              hint: const Text('Şube'),
+              items: _branchLetters.map((branch) => DropdownMenuItem(value: branch, child: Text(branch))).toList(),
+              onChanged: (value) => setState(() => _selectedBranch = value),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              validator: (v) => v == null ? 'Zorunlu' : null,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      DropdownButtonFormField<String>(
+        value: _selectedCoachId,
+        hint: const Text('Eğitim Koçu Seçin'),
+        items: _coaches.map((doc) {
+          final coach = doc.data() as Map<String, dynamic>;
+          return DropdownMenuItem(value: doc.id, child: Text('${coach['name']} ${coach['surname']}'));
+        }).toList(),
+        onChanged: (value) => setState(() => _selectedCoachId = value),
+        decoration: const InputDecoration(labelText: 'Eğitim Koçu', border: OutlineInputBorder()),
+        validator: (v) => v == null ? 'Koç seçimi zorunludur' : null,
+      ),
+    ];
+  }
+
+  // YENİ: Veliye özel alanları oluşturan fonksiyon
+  List<Widget> _buildParentFields() {
+    return [
+      const SizedBox(height: 16),
+      DropdownButtonFormField<String>(
+        value: _selectedStudentId,
+        hint: const Text('Öğrenci Seçin'),
+        items: _students.map((doc) {
+          final student = doc.data() as Map<String, dynamic>;
+          return DropdownMenuItem(value: doc.id, child: Text('${student['name']} ${student['surname']}'));
+        }).toList(),
+        onChanged: (value) => setState(() => _selectedStudentId = value),
+        decoration: const InputDecoration(labelText: 'Bağlı Olduğu Öğrenci', border: OutlineInputBorder()),
+        validator: (v) => v == null ? 'Öğrenci seçimi zorunludur' : null,
+      ),
+    ];
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      validator: (v) => v!.isEmpty ? 'Bu alan boş olamaz' : null,
     );
   }
 }

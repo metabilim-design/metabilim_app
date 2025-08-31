@@ -22,7 +22,11 @@ class Event {
 }
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  // GÜNCELLENDİ: Artık dışarıdan ID ve isim alabiliyor
+  final String? studentId;
+  final String? studentName;
+
+  const DashboardPage({super.key, this.studentId, this.studentName});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -35,34 +39,44 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime _selectedDate = DateTime.now();
   String _userName = '...';
   bool _isLoading = true;
-  User? _currentUser;
+  late String _targetStudentId; // Görüntülenecek öğrencinin ID'si
 
-  // YENİ: Tamamlanan görevleri lokal olarak tutmak için bir Set
   final Set<String> _completedTasks = {};
 
   @override
   void initState() {
     super.initState();
+    // Eğer dışarıdan bir studentId geldiyse onu kullan, gelmediyse giriş yapan kullanıcıyı kullan
+    _targetStudentId = widget.studentId ?? _auth.currentUser!.uid;
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    _currentUser = _auth.currentUser;
-    if (_currentUser != null) {
-      DocumentSnapshot userData = await _firestore.collection('users').doc(_currentUser!.uid).get();
+    // Veli panelinden isim hazır geldiyse, tekrar veritabanından çekme
+    if (widget.studentName != null) {
       if (mounted) {
         setState(() {
-          _userName = userData.get('name');
+          _userName = widget.studentName!;
           _isLoading = false;
         });
       }
+      return;
+    }
+
+    // Öğrenci kendi giriyorsa ismini veritabanından çek
+    DocumentSnapshot userData = await _firestore.collection('users').doc(_targetStudentId).get();
+    if (mounted) {
+      setState(() {
+        _userName = userData.get('name');
+        _isLoading = false;
+      });
     }
   }
 
   void _changeDay(int amount) {
     setState(() {
       _selectedDate = _selectedDate.add(Duration(days: amount));
-      _completedTasks.clear(); // Gün değiştiğinde işaretlemeleri sıfırla
+      _completedTasks.clear();
     });
   }
 
@@ -112,7 +126,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (_isLoading)
                   const CircularProgressIndicator()
                 else
-                  Text('Hoş Geldin, $_userName', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF003366))),
+                  Text(
+                    // Veli giriş yaptıysa "Hoş Geldin" yerine doğrudan öğrenci ismini göster
+                      widget.studentId != null ? _userName : 'Hoş Geldin, $_userName',
+                      style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF003366))
+                  ),
               ],
             ),
           ),
@@ -125,12 +143,10 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 8.0),
 
           Expanded(
-            child: _currentUser == null
-                ? const Center(child: Text('Giriş yapmış kullanıcı bulunamadı.'))
-                : StreamBuilder<QuerySnapshot>(
+            child: StreamBuilder<QuerySnapshot>(
               stream: _firestore
                   .collection('schedules')
-                  .where('studentUid', isEqualTo: _currentUser!.uid)
+                  .where('studentUid', isEqualTo: _targetStudentId) // GÜNCELLENDİ
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -175,7 +191,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     final task = (slot['task'] as Map<String, dynamic>?) ?? {'type': 'empty'};
                     final Event event = _createEventFromTask(task, time);
 
-                    return _buildEventTile(event);
+                    // Öğrenci ve veli için farklı tıklama davranışları
+                    return _buildEventTile(event, isParentView: widget.studentId != null);
                   },
                 );
               },
@@ -200,9 +217,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // GÜNCELLENMİŞ WIDGET
-  Widget _buildEventTile(Event event) {
-    // Her görev için eşsiz bir kimlik oluşturuyoruz
+  Widget _buildEventTile(Event event, {required bool isParentView}) {
     final eventId = '${event.time}-${event.title}-${event.subtitle}';
     final isCompleted = _completedTasks.contains(eventId);
 
@@ -244,9 +259,7 @@ class _DashboardPageState extends State<DashboardPage> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          // Checkbox kaldırıldı
-          onTap: () {
-            // Sadece 'empty' ve 'fixed' olmayan görevler işaretlenebilsin
+          onTap: isParentView ? null : () { // Veli tıklayamaz, sadece öğrenci tıklayabilir
             if (event.icon != Icons.hourglass_empty && event.icon != Icons.star_border_outlined) {
               setState(() {
                 if (isCompleted) {

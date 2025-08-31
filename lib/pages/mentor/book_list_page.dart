@@ -8,7 +8,7 @@ import 'package:metabilim/pages/mentor/edit_book_page.dart';
 import 'package:metabilim/pages/mentor/give_practices_page.dart';
 import 'package:metabilim/pages/mentor/edit_practice_page.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:flutter_speed_dial/flutter_speed_dial.dart'; // YENİ: Speed Dial paketi
+import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 
 class BookListPage extends StatefulWidget {
   const BookListPage({super.key});
@@ -41,11 +41,17 @@ class _BookListPageState extends State<BookListPage> {
     );
   }
 
-  Future<void> _pickMultipleImages() async {
+  // GÜNCELLENDİ: Hangi materyal türünün ekleneceğini parametre olarak alıyor
+  Future<void> _pickImagesAndStartProcess(String materialType) async {
     final List<XFile> pickedFiles = await _picker.pickMultiImage();
     if (pickedFiles.isNotEmpty && mounted) {
       final List<File> imageFiles = pickedFiles.map((file) => File(file.path)).toList();
-      Navigator.push(context, MaterialPageRoute(builder: (context) => ConfirmUploadPage(imageFiles: imageFiles)));
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => ConfirmUploadPage(
+          imageFiles: imageFiles,
+          materialType: materialType, // Yeni parametreyi ConfirmUploadPage'e gönderiyoruz
+        ),
+      ));
     }
   }
 
@@ -88,10 +94,10 @@ class _BookListPageState extends State<BookListPage> {
           );
         },
       ),
-      // GÜNCELLEME: FloatingActionButton'lar SpeedDial ile değiştirildi
+      // GÜNCELLENDİ: SpeedDial'a "Fasikül Ekle" seçeneği eklendi
       floatingActionButton: SpeedDial(
-        icon: Icons.add, // Ana ikon '+'
-        activeIcon: Icons.close, // Açıkkenki ikon 'x'
+        icon: Icons.add,
+        activeIcon: Icons.close,
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         overlayColor: Colors.black,
@@ -102,17 +108,19 @@ class _BookListPageState extends State<BookListPage> {
             child: const Icon(Icons.note_alt_outlined),
             label: 'Deneme Ekle',
             labelStyle: GoogleFonts.poppins(),
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            foregroundColor: Colors.white,
             onTap: _navigateToAddPractice,
           ),
           SpeedDialChild(
-            child: const Icon(Icons.add_a_photo_outlined),
-            label: 'Yeni Kitap Ekle',
+            child: const Icon(Icons.auto_stories_outlined),
+            label: 'Fasikül Ekle', // YENİ
             labelStyle: GoogleFonts.poppins(),
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-            foregroundColor: Colors.white,
-            onTap: _pickMultipleImages,
+            onTap: () => _pickImagesAndStartProcess('Fasikül'),
+          ),
+          SpeedDialChild(
+            child: const Icon(Icons.menu_book_outlined),
+            label: 'Kitap Ekle',
+            labelStyle: GoogleFonts.poppins(),
+            onTap: () => _pickImagesAndStartProcess('Kitap'),
           ),
         ],
       ),
@@ -129,7 +137,7 @@ class _BookListPageState extends State<BookListPage> {
         leading: const Icon(Icons.menu_book, color: Colors.blueGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         title: Text('${book['subject']} - ${book['publisher']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        subtitle: Text('Seviye: ${book['level']} | Tür: ${book['bookType']}', style: GoogleFonts.poppins(color: Colors.grey[600])),
+        subtitle: Text('Tür: ${book['bookType']}'), // Tür bilgisi gösteriliyor
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EditBookPage(bookId: doc.id, bookData: book))),
       ),
@@ -137,6 +145,7 @@ class _BookListPageState extends State<BookListPage> {
   }
 
   Widget _buildPracticeTile(DocumentSnapshot doc) {
+    // ... Bu fonksiyon aynı kalıyor
     final practice = doc.data() as Map<String, dynamic>;
     return Card(
       elevation: 4,
@@ -147,7 +156,7 @@ class _BookListPageState extends State<BookListPage> {
         leading: const Icon(Icons.note_alt, color: Colors.teal),
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         title: Text('${practice['subject']} - ${practice['publisher']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        subtitle: Text('Seviye: ${practice['level']} | Adet: ${practice['count']}', style: GoogleFonts.poppins(color: Colors.grey[700])),
+        subtitle: Text('Adet: ${practice['count']}', style: GoogleFonts.poppins(color: Colors.grey[700])),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EditPracticePage(practiceId: doc.id, practiceData: practice))),
       ),

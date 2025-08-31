@@ -6,7 +6,7 @@ KAYIT İŞİ:
 
 ARAYÜZ İŞİ:
 	1)Mentor:
-		a)Öğrenciler kısmındaki listeleme öğrenci ve etüte göre değişicek artık Ati
+		***a)Öğrenciler kısmındaki listeleme öğrenci ve etüte göre değişicek artık Ati
 		b)Mentor ödev veremez mentor ödev kontrol edebilir ödev verme işi eğitim koçuna geçicek Ati
 		c)Yoklama alma işini saat saate dökelim kanki Ati
 		d)Kitap ekleme işine fasikül kategorisi getiricez Ati

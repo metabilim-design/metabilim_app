@@ -6,10 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:metabilim/student_shell.dart';
 import 'package:metabilim/mentor_shell.dart';
 import 'package:metabilim/admin_shell.dart';
-
-// YENİ: Bu dosyaları projenizde oluşturmanız gerekecek
 import 'package:metabilim/egitim_kocu_shell.dart';
-// import 'package:metabilim/veli_shell.dart';
+import 'package:metabilim/veli_shell.dart'; // Veli için oluşturulan shell
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -53,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
       if (result['success']) {
         _showFeedback('${result['role']} olarak giriş yapıldı.');
 
-        // GÜNCELLENDİ: Yeni roller için yönlendirme eklendi
+        // GÜNCELLENDİ: Tüm roller için yönlendirme mevcut
         switch (result['role']) {
           case 'Ogrenci':
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StudentShell()));
@@ -66,12 +64,9 @@ class _LoginPageState extends State<LoginPage> {
             break;
           case 'Eğitim Koçu':
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EgitimKocuShell()));
-            print('Eğitim Koçu Shell sayfasına yönlendirilecek.');
             break;
           case 'Veli':
-          // TODO: VeliShell sayfasını oluşturduktan sonra aşağıdaki yorumu kaldırın
-          // Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VeliShell()));
-            print('Veli Shell sayfasına yönlendirilecek.');
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VeliShell()));
             break;
         }
       } else {
@@ -80,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // GÜNCELLENDİ: Yeni roller için etiketler eklendi
+  // GÜNCELLENDİ: Tüm roller için etiketler
   String getIdentifierLabel() {
     switch (_selectedRole) {
       case 'Ogrenci': return 'Okul Numarası';
@@ -111,13 +106,13 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Image.asset('assets/images/image_0d0f89.png', height: 120), // DOKUNULMADI
+                    Image.asset('assets/images/image_0d0f89.png', height: 120),
                     const SizedBox(height: 50),
-                    // GÜNCELLENDİ: Yeni roller dropdown'a eklendi
+                    // GÜNCELLENDİ: Tüm roller dropdown'a eklendi
                     DropdownButtonFormField<String>(
                       value: _selectedRole,
                       decoration: const InputDecoration(labelText: 'Giriş Tipi', border: OutlineInputBorder()),
-                      items: ['Ogrenci', 'Mentor', 'Eğitim Koçu', 'Veli', 'Admin'].map((String value) {
+                      items: ['Ogrenci', 'Veli', 'Mentor', 'Eğitim Koçu', 'Admin'].map((String value) {
                         return DropdownMenuItem<String>(value: value, child: Text(value));
                       }).toList(),
                       onChanged: (newValue) => setState(() => _selectedRole = newValue!),

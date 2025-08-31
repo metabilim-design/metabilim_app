@@ -5,12 +5,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'give_books_page.dart';
 
 class ConfirmUploadPage extends StatefulWidget {
   final List<File> imageFiles;
-  const ConfirmUploadPage({super.key, required this.imageFiles});
+  final String materialType; // YENİ
+
+  const ConfirmUploadPage({
+    super.key,
+    required this.imageFiles,
+    required this.materialType, // YENİ
+  });
 
   @override
   State<ConfirmUploadPage> createState() => _ConfirmUploadPageState();
@@ -20,6 +25,7 @@ class _ConfirmUploadPageState extends State<ConfirmUploadPage> {
   bool _isProcessing = false;
 
   Future<void> _processImagesWithAI() async {
+    // ... Bu fonksiyonun içi büyük ölçüde aynı
     if (widget.imageFiles.isEmpty || !mounted) return;
     setState(() => _isProcessing = true);
 
@@ -80,14 +86,9 @@ $fullText
       final cleanResponse = response.text!.replaceAll('```json', '').replaceAll('```', '').trim();
       final List<dynamic> parsedData = jsonDecode(cleanResponse);
 
-      // YENİ EKLENEN SIRALAMA KODU
-      // Yapay zekanın sıralamayı doğru yapmama ihtimaline karşı,
-      // gelen veriyi sayfa numarasına göre garanti olarak sıralıyoruz.
       parsedData.sort((a, b) {
-        // 'sayfa' değerlerini al ve sayıya çevirmeye çalış
         final pageA = int.tryParse(a['sayfa']?.toString() ?? '0') ?? 9999;
         final pageB = int.tryParse(b['sayfa']?.toString() ?? '0') ?? 9999;
-        // Sayısal olarak karşılaştır
         return pageA.compareTo(pageB);
       });
 
@@ -130,7 +131,11 @@ $fullText
             onPressed: () {
               Navigator.of(context).pop();
               Navigator.of(context).push(MaterialPageRoute(
-                builder: (context) => GiveBooksPage(topics: results),
+                // GÜNCELLENDİ: GiveBooksPage'e materyal türünü de gönderiyoruz
+                builder: (context) => GiveBooksPage(
+                  topics: results,
+                  materialType: widget.materialType,
+                ),
               ));
             },
             child: const Text('Onayla ve Devam Et'),
@@ -153,6 +158,7 @@ $fullText
 
   @override
   Widget build(BuildContext context) {
+    // ... Bu fonksiyonun geri kalanı aynı
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.imageFiles.length} Sayfa Seçildi'),

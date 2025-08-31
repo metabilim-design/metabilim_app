@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
 import 'student_detail_page.dart';
 
-// Hem durumu hem de rengini bir arada tutmak için yardımcı bir sınıf
 class StatusInfo {
   final String text;
   final Color color;
@@ -14,9 +13,14 @@ class StatusInfo {
 }
 
 class StudentStatusTile extends StatefulWidget {
-  final DocumentSnapshot studentDoc;
+  final String studentId;
+  final Map<String, dynamic> studentData;
 
-  const StudentStatusTile({super.key, required this.studentDoc});
+  const StudentStatusTile({
+    super.key,
+    required this.studentId,
+    required this.studentData, // EKSİK OLAN SATIR BUYDU, EKLENDİ
+  });
 
   @override
   State<StudentStatusTile> createState() => _StudentStatusTileState();
@@ -41,7 +45,6 @@ class _StudentStatusTileState extends State<StudentStatusTile> {
     super.dispose();
   }
 
-  // GÜNCELLENDİ: Artık String yerine StatusInfo döndürüyor
   StatusInfo _getCurrentStatus(DocumentSnapshot? scheduleDoc, BuildContext context) {
     if (scheduleDoc == null) {
       return StatusInfo('Program Atanmamış', Colors.grey);
@@ -73,7 +76,7 @@ class _StudentStatusTileState extends State<StudentStatusTile> {
     });
 
     if (currentSlot == null) {
-      return StatusInfo('Etüt Saatleri Dışında', Colors.red); // KIRMIZI
+      return StatusInfo('Etüt Saatleri Dışında', Colors.red);
     }
 
     final task = currentSlot['task'] as Map<String, dynamic>;
@@ -93,17 +96,17 @@ class _StudentStatusTileState extends State<StudentStatusTile> {
       return StatusInfo('Etüt Saatleri Dışında', Colors.red);
     }
 
-    return StatusInfo(statusText, Colors.green.shade700); // YEŞİL
+    return StatusInfo(statusText, Colors.green.shade700);
   }
 
   @override
   Widget build(BuildContext context) {
-    final studentData = widget.studentDoc.data()! as Map<String, dynamic>;
+    final studentData = widget.studentData;
     final studentName = '${studentData['name']} ${studentData['surname']}';
 
     final scheduleStream = FirebaseFirestore.instance
         .collection('schedules')
-        .where('studentUid', isEqualTo: widget.studentDoc.id)
+        .where('studentUid', isEqualTo: widget.studentId)
         .where('startDate', isLessThanOrEqualTo: DateTime.now())
         .where('endDate', isGreaterThanOrEqualTo: DateTime.now())
         .limit(1)
@@ -135,8 +138,8 @@ class _StudentStatusTileState extends State<StudentStatusTile> {
             ),
             title: Text(studentName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
             subtitle: Text(
-              statusInfo.text, // GÜNCELLEME: Metin buradan geliyor
-              style: GoogleFonts.poppins(color: statusInfo.color), // GÜNCELLEME: Renk buradan geliyor
+              statusInfo.text,
+              style: GoogleFonts.poppins(color: statusInfo.color),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -146,7 +149,7 @@ class _StudentStatusTileState extends State<StudentStatusTile> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => StudentDetailPage(
-                    studentId: widget.studentDoc.id,
+                    studentId: widget.studentId,
                     studentName: studentName,
                   ),
                 ),

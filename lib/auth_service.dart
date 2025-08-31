@@ -5,6 +5,7 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ... (Diğer fonksiyonlar aynı kalıyor)
   String _getErrorMessage(String code) {
     switch (code) {
       case 'weak-password': return 'Şifre çok zayıf. Lütfen daha güçlü bir şifre seçin.';
@@ -22,7 +23,8 @@ class AuthService {
     required String surname,
     required String number,
     required String password,
-    required String studentClass,
+    required String className,
+    String? coachUid,
   }) async {
     String email = '$number@metabilim.app';
     try {
@@ -31,7 +33,7 @@ class AuthService {
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
           'name': name, 'surname': surname, 'number': number,
-          'email': email, 'role': 'Ogrenci', 'class': studentClass,
+          'email': email, 'role': 'Ogrenci', 'class': className, 'coachUid': coachUid,
         });
         return null;
       }
@@ -81,20 +83,29 @@ class AuthService {
     return 'Bilinmeyen bir hata oluştu.';
   }
 
+  // GÜNCELLENDİ: Veli kaydı artık ilişkili öğrencinin ID'sini (studentUid) alıyor
   Future<String?> registerParent({
     required String name,
     required String surname,
     required String username,
     required String password,
+    required String? studentUid, // Yeni parametre
   }) async {
+    if (studentUid == null) {
+      return 'Lütfen velinin bağlanacağı öğrenciyi seçin.';
+    }
     String email = '$username@metabilim.parent';
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       User? user = userCredential.user;
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
-          'name': name, 'surname': surname, 'username': username,
-          'email': email, 'role': 'Veli',
+          'name': name,
+          'surname': surname,
+          'username': username,
+          'email': email,
+          'role': 'Veli',
+          'studentUid': studentUid, // Öğrenci bağlantısını veritabanına kaydediyoruz
         });
         return null;
       }
@@ -102,14 +113,13 @@ class AuthService {
     return 'Bilinmeyen bir hata oluştu.';
   }
 
-  // DÜZELTME BURADA: 'Admin' rolü eklendi
   String _getEmailSuffixForRole(String role) {
     switch (role) {
       case 'Ogrenci': return '@metabilim.app';
       case 'Mentor': return '@metabilim.mentor';
       case 'Eğitim Koçu': return '@metabilim.coach';
       case 'Veli': return '@metabilim.parent';
-      case 'Admin': return '@metabilim.admin'; // EKSİK OLAN SATIR BUYDU
+      case 'Admin': return '@metabilim.admin';
       default: return '';
     }
   }

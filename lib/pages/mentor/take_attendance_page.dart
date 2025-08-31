@@ -18,44 +18,39 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   String? _selectedSession;
   List<DocumentSnapshot> _students = [];
   Map<String, String> _attendanceStatus = {};
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _isSaving = false;
 
-  // DÜZELTME BURADA YAPILDI
-  final List<Map<String, dynamic>> _sessions = [
-    {'name': 'Öğleden Önce', 'icon': Icons.wb_sunny_outlined}, // 'Önce' olarak düzeltildi
-    {'name': 'Öğleden Sonra', 'icon': Icons.brightness_5_outlined},
-    {'name': 'Akşam', 'icon': Icons.nightlight_round},
-  ];
+  List<String> _studySlots = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchStudents();
+    _fetchInitialData();
   }
 
-  Future<void> _fetchStudents() async {
+  Future<void> _fetchInitialData() async {
     setState(() => _isLoading = true);
-    QuerySnapshot studentSnapshot = await _firestore
-        .collection('users')
-        .where('role', isEqualTo: 'Ogrenci')
-        .get();
-    if (mounted) {
-      setState(() {
-        _students = studentSnapshot.docs;
-        _isLoading = false;
-      });
-    }
-  }
+    try {
+      final settingsDoc = await _firestore.collection('settings').doc('schedule_times').get();
+      if (settingsDoc.exists) {
+        final data = settingsDoc.data()!;
+        final today = DateTime.now().weekday;
+        final isSaturday = today == DateTime.saturday;
+        _studySlots = List<String>.from(isSaturday ? data['saturdayTimes'] ?? [] : data['weekdayTimes'] ?? []);
+      }
 
-  String _getAbbreviatedSession(String? sessionName) {
-    if (sessionName == null) return '';
-    switch (sessionName) {
-      case 'Öğleden Önce':
-        return 'Ö.Ö';
-      case 'Öğleden Sonra':
-        return 'Ö.S';
-      default:
-        return sessionName;
+      final studentSnapshot = await _firestore.collection('users').where('role', isEqualTo: 'Ogrenci').get();
+      _students = studentSnapshot.docs;
+
+    } catch (e) {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Veriler yüklenirken hata oluştu: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -85,23 +80,40 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
 
   Future<void> _saveAttendance() async {
     if (_selectedSession == null) return;
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
+
     WriteBatch batch = _firestore.batch();
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     String mentorId = _auth.currentUser!.uid;
+
     _attendanceStatus.forEach((studentId, status) {
       if (status != 'belirsiz') {
         DocumentReference docRef = _firestore.collection('attendance').doc('${today}_${studentId}_$_selectedSession');
-        batch.set(docRef, { 'date': today, 'session': _selectedSession, 'studentUid': studentId, 'status': status, 'mentorUid': mentorId, 'timestamp': FieldValue.serverTimestamp(), });
+        batch.set(docRef, {
+          'date': today,
+          'session': _selectedSession,
+          'studentUid': studentId,
+          'status': status,
+          'mentorUid': mentorId,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
       }
     });
-    await batch.commit();
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _selectedSession = null;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yoklama başarıyla kaydedildi!'), backgroundColor: Colors.green),);
+
+    try {
+      await batch.commit();
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _selectedSession = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yoklama başarıyla kaydedildi!'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if(mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydederken hata oluştu: $e'), backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -109,7 +121,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Yoklama Al'),
+        title: Text(_selectedSession == null ? 'Yoklama Al' : '$_selectedSession Yoklaması'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -121,38 +133,45 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
 
   Widget _buildSessionSelection() {
     final String formattedDate = DateFormat.yMMMMd('tr_TR').format(DateTime.now());
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(Icons.checklist_rtl_outlined, size: 80, color: Theme.of(context).primaryColor.withOpacity(0.5)),
-          const SizedBox(height: 16),
-          Text('Yoklama Oturumları', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold)),
-          Text('Lütfen yoklama alınacak oturumu seçin.', style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade600)),
-          const SizedBox(height: 24),
-          Card(
-            elevation: 2,
-            child: ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: Text('Bugünün Tarihi: $formattedDate', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-            ),
-          ),
-          const SizedBox(height: 20),
-          ..._sessions.map((session) {
-            return Card(
-              elevation: 3,
-              margin: const EdgeInsets.symmetric(vertical: 8.0),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+    if (_studySlots.isEmpty) {
+      return Center(child: Text("Bugün için ayarlanmış etüt saati bulunmuyor.", style: GoogleFonts.poppins()));
+    }
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(Icons.checklist_rtl_outlined, size: 80, color: Theme.of(context).primaryColor.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text('Etüt Saatleri', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text('Lütfen yoklama alınacak etüt saatini seçin.', style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade600)),
+            const SizedBox(height: 24),
+            Card(
+              elevation: 2,
               child: ListTile(
-                leading: Icon(session['icon'], color: Theme.of(context).colorScheme.secondary),
-                title: Text(session['name'], style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => _selectSession(session['name']),
+                leading: const Icon(Icons.calendar_today),
+                title: Text('Bugünün Tarihi: $formattedDate', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
               ),
-            );
-          }).toList(),
-        ],
+            ),
+            const SizedBox(height: 20),
+            ..._studySlots.map((session) {
+              return Card(
+                elevation: 3,
+                margin: const EdgeInsets.symmetric(vertical: 8.0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: Icon(Icons.access_time_filled_outlined, color: Theme.of(context).colorScheme.secondary),
+                  title: Text(session, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () => _selectSession(session),
+                ),
+              );
+            }).toList(),
+          ],
+        ),
       ),
     );
   }
@@ -165,12 +184,20 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
           child: Row(
             children: [
               IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _selectedSession = null)),
-              const SizedBox(width: 16),
-              Text(_getAbbreviatedSession(_selectedSession), style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
               const Spacer(),
-              IconButton(icon: const Icon(Icons.done_all), tooltip: 'Tümünü Var Yap', onPressed: _markAllPresent, color: Theme.of(context).primaryColor),
+              ElevatedButton.icon(
+                onPressed: _markAllPresent,
+                icon: const Icon(Icons.done_all),
+                label: const Text('Tümünü Var Yap'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey.shade100),
+              ),
               const SizedBox(width: 8),
-              ElevatedButton(onPressed: _saveAttendance, child: const Text('Kaydet')),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _saveAttendance,
+                child: _isSaving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Kaydet'),
+              ),
             ],
           ),
         ),
@@ -182,6 +209,11 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
               final data = student.data() as Map<String, dynamic>;
               final studentId = student.id;
               final status = _attendanceStatus[studentId] ?? 'belirsiz';
+
+              // DÜZELTME BURADA: 'class' ve 'number' alanlarını güvenli bir şekilde okuyoruz
+              final studentClass = data.containsKey('class') ? data['class'] : 'Sınıf Yok';
+              final studentNumber = data.containsKey('number') ? data['number'] : 'No Yok';
+
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
                 child: Padding(
@@ -193,7 +225,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('${data['name']} ${data['surname']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                            Text('No: ${data['number']} | Sınıf: ${data['class'] ?? 'N/A'} | Masa: ${data['deskNumber'] ?? 'N/A'}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('No: $studentNumber | Sınıf: $studentClass', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                           ],
                         ),
                       ),

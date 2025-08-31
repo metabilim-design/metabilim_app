@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:metabilim/pages/admin/add_user_page.dart';
-import 'package:metabilim/pages/admin/edit_user_page.dart'; // Yeni sayfayı import et
+import 'package:metabilim/pages/admin/edit_user_page.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -23,12 +23,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     switch (role) {
       case 'Admin': return Icons.admin_panel_settings_outlined;
       case 'Mentor': return Icons.school_outlined;
+      case 'Eğitim Koçu': return Icons.school_outlined; // İkonu mentor ile aynı tuttuk
       case 'Ogrenci': return Icons.person_outline;
+      case 'Veli': return Icons.escalator_warning_outlined;
       default: return Icons.person;
     }
   }
 
-  // Kullanıcıyı silme fonksiyonu
   Future<void> _deleteUser(String userId) async {
     try {
       await _firestore.collection('users').doc(userId).delete();
@@ -46,7 +47,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  // Silme işlemi için onay dialog'u
   void _showDeleteConfirmationDialog(String userId, String userName) {
     showDialog(
       context: context,
@@ -88,9 +88,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
               Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
               String name = '${data['name'] ?? ''} ${data['surname'] ?? ''}'.trim();
               String role = data['role'] ?? 'Bilinmiyor';
-              String identifier = role == 'Ogrenci'
-                  ? 'No: ${data['number'] ?? 'N/A'}'
-                  : (data['username'] != null ? 'K.Adı: ${data['username']}' : '');
+
+              // GÜNCELLENDİ: Öğrenci için Sınıf bilgisini de gösterecek şekilde düzenlendi
+              String identifier;
+              if (role == 'Ogrenci') {
+                String studentClass = data['class'] ?? 'Sınıf Yok';
+                String studentNumber = data['number'] ?? 'No Yok';
+                identifier = 'Sınıf: $studentClass | No: $studentNumber';
+              } else {
+                identifier = data['username'] != null ? 'K.Adı: ${data['username']}' : '';
+              }
 
               return Card(
                 elevation: 2,

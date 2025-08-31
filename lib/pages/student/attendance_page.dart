@@ -5,8 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// GÜNCELLENDİ: Her bir etüt saatinin yoklama durumunu tutacak bir model
+class AttendanceStatus {
+  final String timeSlot;
+  final String status; // 'geldi', 'gelmedi', 'alınmadı'
+
+  AttendanceStatus({required this.timeSlot, required this.status});
+}
+
 class AttendancePage extends StatefulWidget {
-  const AttendancePage({super.key});
+  final String? studentId;
+  const AttendancePage({super.key, this.studentId});
 
   @override
   State<AttendancePage> createState() => _AttendancePageState();
@@ -14,47 +23,55 @@ class AttendancePage extends StatefulWidget {
 
 class _AttendancePageState extends State<AttendancePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late String _targetStudentId;
 
   DateTime _focusedDate = DateTime.now();
   DateTime? _selectedDate;
-
-  final Map<DateTime, Map<String, bool>> _attendanceCache = {};
 
   @override
   void initState() {
     super.initState();
     _selectedDate = _focusedDate;
+    _targetStudentId = widget.studentId ?? FirebaseAuth.instance.currentUser!.uid;
   }
 
-  Future<Map<String, bool>> _getAttendanceForDate(DateTime date) async {
-    // ... Bu fonksiyon aynı kalıyor
-    final dateOnly = DateTime.utc(date.year, date.month, date.day);
-    if (_attendanceCache.containsKey(dateOnly)) {
-      return _attendanceCache[dateOnly]!;
+  // GÜNCELLENDİ: Seçilen günün yoklama verilerini ve etüt saatlerini birleştiren fonksiyon
+  Future<List<AttendanceStatus>> _getAttendanceForDate(DateTime date) async {
+    // 1. Adım: O gün için geçerli etüt saatlerini çek
+    final settingsDoc = await _firestore.collection('settings').doc('schedule_times').get();
+    List<String> studySlots = [];
+    if (settingsDoc.exists) {
+      final data = settingsDoc.data()!;
+      final isSaturday = date.weekday == DateTime.saturday;
+      studySlots = List<String>.from(isSaturday ? data['saturdayTimes'] ?? [] : data['weekdayTimes'] ?? []);
     }
-    final studentUid = _auth.currentUser?.uid;
-    if (studentUid == null) return {};
+
+    if (studySlots.isEmpty) {
+      return []; // O gün için etüt ayarlanmamışsa boş liste döndür
+    }
+
+    // 2. Adım: Öğrencinin o güne ait tüm yoklama kayıtlarını çek
     final formattedDate = DateFormat('yyyy-MM-dd').format(date);
     final querySnapshot = await _firestore
         .collection('attendance')
-        .where('studentUid', isEqualTo: studentUid)
+        .where('studentUid', isEqualTo: _targetStudentId)
         .where('date', isEqualTo: formattedDate)
         .get();
-    final dailyAttendance = {
-      'Öğleden Önce': false,
-      'Öğleden Sonra': false,
-      'Akşam': false,
+
+    // Yoklama kayıtlarını kolay erişim için bir haritaya dönüştür (session -> status)
+    final Map<String, String> attendanceRecords = {
+      for (var doc in querySnapshot.docs) doc.data()['session']: doc.data()['status']
     };
-    for (var doc in querySnapshot.docs) {
-      final data = doc.data();
-      if (data.containsKey('session') && data.containsKey('status')) {
-        if (dailyAttendance.containsKey(data['session'])) {
-          dailyAttendance[data['session']] = (data['status'] == 'geldi');
-        }
-      }
+
+    // 3. Adım: Etüt saatlerini ve yoklama kayıtlarını birleştir
+    final List<AttendanceStatus> dailyAttendance = [];
+    for (var slot in studySlots) {
+      dailyAttendance.add(AttendanceStatus(
+        timeSlot: slot,
+        status: attendanceRecords[slot] ?? 'alınmadı', // Kayıt yoksa 'alınmadı' olarak işaretle
+      ));
     }
-    _attendanceCache[dateOnly] = dailyAttendance;
+
     return dailyAttendance;
   }
 
@@ -70,6 +87,7 @@ class _AttendancePageState extends State<AttendancePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildCalendar(primaryColor, secondaryColor),
+            const SizedBox(height: 16),
             if (_selectedDate != null)
               Expanded(
                 child: _buildDailyAttendanceDetails(_selectedDate!),
@@ -81,7 +99,6 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 
   Widget _buildCalendar(Color primaryColor, Color secondaryColor) {
-    // ... Bu widget aynı kalıyor
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -112,14 +129,8 @@ class _AttendancePageState extends State<AttendancePage> {
             rightChevronIcon: Icon(Icons.chevron_right, color: primaryColor),
           ),
           calendarStyle: CalendarStyle(
-            todayDecoration: BoxDecoration(
-              color: secondaryColor.withOpacity(0.5),
-              shape: BoxShape.circle,
-            ),
-            selectedDecoration: BoxDecoration(
-              color: primaryColor,
-              shape: BoxShape.circle,
-            ),
+            todayDecoration: BoxDecoration(color: secondaryColor.withOpacity(0.5), shape: BoxShape.circle),
+            selectedDecoration: BoxDecoration(color: primaryColor, shape: BoxShape.circle),
             weekendTextStyle: TextStyle(color: primaryColor.withOpacity(0.7)),
           ),
         ),
@@ -127,105 +138,87 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  // GÜNCELLENDİ: Bu fonksiyonun içi tamamen yenilendi
+  // GÜNCELLENDİ: Artık yeni sisteme göre yoklama detaylarını gösteriyor
   Widget _buildDailyAttendanceDetails(DateTime date) {
-    return FutureBuilder<Map<String, bool>>(
+    return FutureBuilder<List<AttendanceStatus>>(
       future: _getAttendanceForDate(date),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Card(child: ListTile(title: Text('Veri yüklenemedi.')));
+        if (snapshot.hasError) {
+          return Center(child: Text('Veri yüklenemedi: ${snapshot.error}', style: GoogleFonts.poppins()));
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(child: Text('Bu tarih için ayarlanmış etüt yok.', style: GoogleFonts.poppins()));
         }
 
-        final attendance = snapshot.data!;
+        final attendanceList = snapshot.data!;
         return Container(
-          margin: const EdgeInsets.only(top: 24.0, bottom: 8.0),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.2),
-                spreadRadius: 1,
-                blurRadius: 5,
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 1, blurRadius: 5)],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              // DEĞİŞİKLİK: Elemanları dikeyde eşit aralıklarla yayıyoruz
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${DateFormat('d MMMM EEEE', 'tr_TR').format(date)} Detayı',
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(
+                  '${DateFormat('d MMMM EEEE', 'tr_TR').format(date)} Yoklama Detayı',
                   style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                // Divider'ları kaldırıp boşlukları spaceEvenly ile sağlıyoruz
-                _buildAttendanceRow('Öğleden Önce', attendance['Öğleden Önce'] ?? false),
-                _buildAttendanceRow('Öğleden Sonra', attendance['Öğleden Sonra'] ?? false),
-                _buildAttendanceRow('Akşam', attendance['Akşam'] ?? false),
-
-                // YENİ: Günlük özet bölümü
-                _buildAttendanceSummary(attendance),
-              ],
-            ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: attendanceList.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1, indent: 20, endIndent: 20),
+                  itemBuilder: (context, index) {
+                    final attendance = attendanceList[index];
+                    return _buildAttendanceRow(attendance.timeSlot, attendance.status);
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildAttendanceRow(String title, bool isPresent) {
-    // ... Bu widget aynı kalıyor
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: GoogleFonts.poppins(fontSize: 16)),
-          Icon(
-            isPresent ? Icons.check_circle_outline : Icons.highlight_off,
-            color: isPresent ? Colors.green.shade600 : Colors.red.shade600,
-            size: 28,
-          ),
-        ],
-      ),
-    );
-  }
+  // GÜNCELLENDİ: Yoklama durumuna göre ikon ve renk belirleyen widget
+  Widget _buildAttendanceRow(String timeSlot, String status) {
+    IconData icon;
+    Color color;
+    String statusText;
 
-  // YENİ: Günlük katılım özetini oluşturan yardımcı fonksiyon
-  Widget _buildAttendanceSummary(Map<String, bool> attendance) {
-    final totalCount = attendance.length;
-    final presentCount = attendance.values.where((status) => status).length;
-    final summaryText = '$totalCount dersten $presentCount tanesine katıldın.';
+    switch (status) {
+      case 'geldi':
+        icon = Icons.check_circle_outline;
+        color = Colors.green.shade600;
+        statusText = 'Geldi';
+        break;
+      case 'gelmedi':
+        icon = Icons.highlight_off;
+        color = Colors.red.shade600;
+        statusText = 'Gelmedi';
+        break;
+      default: // 'alınmadı' durumu
+        icon = Icons.radio_button_unchecked;
+        color = Colors.grey.shade500;
+        statusText = 'Yoklama Alınmadı';
+    }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+    return ListTile(
+      leading: Icon(Icons.access_time_filled, color: Theme.of(context).primaryColor),
+      title: Text(timeSlot, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.pie_chart_outline,
-            color: Theme.of(context).primaryColor,
-            size: 20,
-          ),
+          Text(statusText, style: GoogleFonts.poppins(color: color, fontWeight: FontWeight.w500)),
           const SizedBox(width: 8),
-          Text(
-            summaryText,
-            style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey.shade700
-            ),
-          ),
+          Icon(icon, color: color, size: 28),
         ],
       ),
     );
