@@ -5,6 +5,11 @@ import 'package:metabilim/login_page.dart';
 import 'package:metabilim/pages/admin/user_management_page.dart';
 import 'package:metabilim/pages/admin/schedule_settings_page.dart';
 import 'package:metabilim/pages/admin/admin_dashboard_page.dart';
+import 'package:metabilim/pages/admin/class_management_page.dart';
+import 'package:metabilim/pages/admin/coach_management_page.dart';
+// YENİ SAYFA İÇİN IMPORT
+import 'package:metabilim/pages/admin/digital_lesson_settings_page.dart';
+
 
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
@@ -16,17 +21,22 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
 
-  // Menüde gösterilecek sayfaları burada listeliyoruz
+  // GÜNCELLENDİ: Menüye yeni sayfa eklendi
   static const List<Widget> _adminPages = <Widget>[
     AdminDashboardPage(),
     UserManagementPage(),
+    ClassManagementPage(),
+    CoachManagementPage(),
+    DigitalLessonSettingsPage(), // YENİ
     ScheduleSettingsPage(),
   ];
 
-  // Sayfalara göre AppBar başlığını değiştirmek için
   static const List<String> _pageTitles = <String>[
     'Genel Bakış',
     'Kullanıcı Yönetimi',
+    'Sınıf Yönetimi',
+    'Eğitim Koçu Yönetimi',
+    'Dijital Ders Ayarları', // YENİ
     'Etüt Saat Ayarları',
   ];
 
@@ -34,7 +44,7 @@ class _AdminShellState extends State<AdminShell> {
     setState(() {
       _selectedIndex = index;
     });
-    Navigator.pop(context); // Menüyü kapat
+    Navigator.pop(context);
   }
 
   @override
@@ -48,36 +58,16 @@ class _AdminShellState extends State<AdminShell> {
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-              ),
-              child: Text(
-                'Admin Paneli',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+              child: Text('Admin Paneli', style: GoogleFonts.poppins(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600)),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard_outlined),
-              title: const Text('Genel Bakış'),
-              selected: _selectedIndex == 0,
-              onTap: () => _onItemTapped(0),
-            ),
-            ListTile(
-              leading: const Icon(Icons.people_alt_outlined),
-              title: const Text('Kullanıcı Yönetimi'),
-              selected: _selectedIndex == 1,
-              onTap: () => _onItemTapped(1),
-            ),
-            ListTile(
-              leading: const Icon(Icons.timer_outlined),
-              title: const Text('Etüt Saat Ayarları'),
-              selected: _selectedIndex == 2,
-              onTap: () => _onItemTapped(2),
-            ),
+            _buildDrawerItem(icon: Icons.dashboard_outlined, title: 'Genel Bakış', index: 0),
+            _buildDrawerItem(icon: Icons.people_alt_outlined, title: 'Kullanıcı Yönetimi', index: 1),
+            _buildDrawerItem(icon: Icons.class_outlined, title: 'Sınıf Yönetimi', index: 2),
+            _buildDrawerItem(icon: Icons.school_outlined, title: 'Eğitim Koçu Yönetimi', index: 3),
+            // YENİ MENÜ ELEMANI
+            _buildDrawerItem(icon: Icons.computer_outlined, title: 'Dijital Ders Ayarları', index: 4),
+            _buildDrawerItem(icon: Icons.timer_outlined, title: 'Etüt Saat Ayarları', index: 5),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout),
@@ -96,6 +86,15 @@ class _AdminShellState extends State<AdminShell> {
         ),
       ),
       body: _adminPages.elementAt(_selectedIndex),
+    );
+  }
+
+  Widget _buildDrawerItem({required IconData icon, required String title, required int index}) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      selected: _selectedIndex == index,
+      onTap: () => _onItemTapped(index),
     );
   }
 }

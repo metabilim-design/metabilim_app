@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:metabilim/pages/mentor/profile_page.dart';
-import 'package:metabilim/pages/coach/coach_student_list_page.dart'; // YENİ
-import 'package:metabilim/pages/coach/assign_homework_page.dart'; // YENİ
-import 'package:metabilim/pages/coach/exam_results_page.dart'; // YENİ
+import 'package:metabilim/pages/coach/coach_student_list_page.dart';
+import 'package:metabilim/pages/coach/assign_homework_page.dart';
+import 'package:metabilim/pages/coach/exam_results_page.dart';
+// GÜNCELLENDİ: Mentor'un materyal sayfasını import ediyoruz
+import 'package:metabilim/pages/mentor/book_list_page.dart';
 
 class EgitimKocuShell extends StatefulWidget {
   const EgitimKocuShell({super.key});
@@ -15,11 +17,12 @@ class EgitimKocuShell extends StatefulWidget {
 class _EgitimKocuShellState extends State<EgitimKocuShell> {
   int _selectedIndex = 0;
 
-  // GÜNCELLENDİ: Alt barda gösterilecek sayfalar artık koça özel
+  // GÜNCELLENDİ: Alt barda gösterilecek sayfalara BookListPage eklendi
   static const List<Widget> _pages = <Widget>[
-    CoachStudentListPage(), // Koçun kendi öğrenci listesi
-    AssignHomeworkPage(),   // Ödev verme sayfası
-    ExamResultsPage(),      // Deneme sonuçları sayfası
+    CoachStudentListPage(),
+    AssignHomeworkPage(),
+    ExamResultsPage(),
+    BookListPage(), // YENİ: Materyaller sayfası
   ];
 
   void _onItemTapped(int index) {
@@ -38,7 +41,6 @@ class _EgitimKocuShellState extends State<EgitimKocuShell> {
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () {
-              // Koç kendi profiline gidebilir
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilePage()));
             },
           ),
@@ -46,16 +48,18 @@ class _EgitimKocuShellState extends State<EgitimKocuShell> {
       ),
       body: _pages.elementAt(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
+        // GÜNCELLENDİ: Navigasyon barına yeni sekme eklendi
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Öğrenciler'),
           BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: 'Ödev Ver'),
           BottomNavigationBarItem(icon: Icon(Icons.bar_chart_outlined), label: 'Deneme Sonuçları'),
+          BottomNavigationBarItem(icon: Icon(Icons.library_books_outlined), label: 'Materyaller'), // YENİ
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
+        type: BottomNavigationBarType.fixed, // 4 eleman olunca bu gerekli
       ),
     );
   }

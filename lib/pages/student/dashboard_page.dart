@@ -22,11 +22,11 @@ class Event {
 }
 
 class DashboardPage extends StatefulWidget {
-  // GÜNCELLENDİ: Artık dışarıdan ID ve isim alabiliyor
   final String? studentId;
   final String? studentName;
+  final String? parentName; // YENİ: Veli ismini alacak parametre
 
-  const DashboardPage({super.key, this.studentId, this.studentName});
+  const DashboardPage({super.key, this.studentId, this.studentName, this.parentName}); // YENİ
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -39,31 +39,30 @@ class _DashboardPageState extends State<DashboardPage> {
   DateTime _selectedDate = DateTime.now();
   String _userName = '...';
   bool _isLoading = true;
-  late String _targetStudentId; // Görüntülenecek öğrencinin ID'si
+  late String _targetStudentId;
 
   final Set<String> _completedTasks = {};
 
   @override
   void initState() {
     super.initState();
-    // Eğer dışarıdan bir studentId geldiyse onu kullan, gelmediyse giriş yapan kullanıcıyı kullan
     _targetStudentId = widget.studentId ?? _auth.currentUser!.uid;
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    // Veli panelinden isim hazır geldiyse, tekrar veritabanından çekme
-    if (widget.studentName != null) {
-      if (mounted) {
+    // GÜNCELLENDİ: Eğer veli ismi geldiyse, onu kullanıcı adı olarak ata
+    if (widget.parentName != null) {
+      if(mounted) {
         setState(() {
-          _userName = widget.studentName!;
+          _userName = widget.parentName!;
           _isLoading = false;
         });
       }
       return;
     }
 
-    // Öğrenci kendi giriyorsa ismini veritabanından çek
+    // Veli değilse, öğrencinin kendi ismini veritabanından çek
     DocumentSnapshot userData = await _firestore.collection('users').doc(_targetStudentId).get();
     if (mounted) {
       setState(() {
@@ -127,8 +126,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   const CircularProgressIndicator()
                 else
                   Text(
-                    // Veli giriş yaptıysa "Hoş Geldin" yerine doğrudan öğrenci ismini göster
-                      widget.studentId != null ? _userName : 'Hoş Geldin, $_userName',
+                    // GÜNCELLENDİ: Artık her zaman "Hoş Geldin" yazacak ve doğru ismi gösterecek
+                      'Hoş Geldin, $_userName',
                       style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF003366))
                   ),
               ],
@@ -138,16 +137,16 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 8.0),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text('Günün Programı', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF003366).withOpacity(0.8))),
+            child: Text(
+              // GÜNCELLENDİ: Veli giriş yaptıysa öğrencinin adını burada belirtiyoruz
+              widget.parentName != null ? "${widget.studentName}'in Günlük Programı" : 'Günün Programı',
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF003366).withOpacity(0.8)),
+            ),
           ),
           const SizedBox(height: 8.0),
-
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('schedules')
-                  .where('studentUid', isEqualTo: _targetStudentId) // GÜNCELLENDİ
-                  .snapshots(),
+              stream: _firestore.collection('schedules').where('studentUid', isEqualTo: _targetStudentId).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -191,7 +190,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     final task = (slot['task'] as Map<String, dynamic>?) ?? {'type': 'empty'};
                     final Event event = _createEventFromTask(task, time);
 
-                    // Öğrenci ve veli için farklı tıklama davranışları
                     return _buildEventTile(event, isParentView: widget.studentId != null);
                   },
                 );
@@ -259,7 +257,7 @@ class _DashboardPageState extends State<DashboardPage> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          onTap: isParentView ? null : () { // Veli tıklayamaz, sadece öğrenci tıklayabilir
+          onTap: isParentView ? null : () {
             if (event.icon != Icons.hourglass_empty && event.icon != Icons.star_border_outlined) {
               setState(() {
                 if (isCompleted) {

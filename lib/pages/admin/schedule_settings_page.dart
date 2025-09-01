@@ -1,6 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:metabilim/pages/admin/edit_schedule_template_page.dart'; // Yeni oluşturacağımız sayfa
 
 class ScheduleSettingsPage extends StatefulWidget {
   const ScheduleSettingsPage({super.key});
@@ -11,161 +12,148 @@ class ScheduleSettingsPage extends StatefulWidget {
 
 class _ScheduleSettingsPageState extends State<ScheduleSettingsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final _formKey = GlobalKey<FormState>();
 
-  bool _isLoading = true;
-  bool _isSaving = false;
+  // Yeni program oluşturma dialoğunu gösterir
+  void _showCreateProgramDialog() {
+    final nameController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
-  // Her bir zaman dilimi için bir controller
-  late List<TextEditingController> _weekdayControllers;
-  late List<TextEditingController> _saturdayControllers;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTimes();
-  }
-
-  @override
-  void dispose() {
-    for (var controller in _weekdayControllers) {
-      controller.dispose();
-    }
-    for (var controller in _saturdayControllers) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  // Firestore'dan mevcut saatleri yükler
-  Future<void> _loadTimes() async {
-    try {
-      final doc = await _firestore.collection('settings').doc('schedule_times').get();
-
-      List<String> weekdayTimes = List.generate(10, (index) => '00:00-00:00'); // Varsayılan
-      List<String> saturdayTimes = List.generate(5, (index) => '00:00-00:00'); // Varsayılan
-
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (data.containsKey('weekdayTimes')) {
-          weekdayTimes = List<String>.from(data['weekdayTimes']);
-        }
-        if (data.containsKey('saturdayTimes')) {
-          saturdayTimes = List<String>.from(data['saturdayTimes']);
-        }
-      }
-
-      _weekdayControllers = weekdayTimes.map((time) => TextEditingController(text: time)).toList();
-      _saturdayControllers = saturdayTimes.map((time) => TextEditingController(text: time)).toList();
-
-    } catch (e) {
-      // Hata durumunda boş listelerle başlat
-      _weekdayControllers = List.generate(10, (_) => TextEditingController());
-      _saturdayControllers = List.generate(5, (_) => TextEditingController());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saatler yüklenemedi: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  // Yeni saatleri Firestore'a kaydeder
-  Future<void> _saveTimes() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-
-    try {
-      final List<String> weekdayTimes = _weekdayControllers.map((c) => c.text.trim()).toList();
-      final List<String> saturdayTimes = _saturdayControllers.map((c) => c.text.trim()).toList();
-
-      await _firestore.collection('settings').doc('schedule_times').set({
-        'weekdayTimes': weekdayTimes,
-        'saturdayTimes': saturdayTimes,
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Etüt saatleri başarıyla güncellendi!'), backgroundColor: Colors.green),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Yeni Program Oluştur", style: GoogleFonts.poppins()),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Program Adı (Örn: Yaz Programı)'),
+              validator: (value) => (value == null || value.trim().isEmpty) ? 'Program adı boş olamaz.' : null,
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final programName = nameController.text.trim();
+                  // Yeni program şablonunu 'schedule_templates' koleksiyonuna ekle
+                  await _firestore.collection('schedule_templates').add({
+                    'programName': programName,
+                    'createdAt': FieldValue.serverTimestamp(),
+                    // Başlangıçta her gün için boş saat listeleri
+                    'schedule': {
+                      'Pazartesi': [], 'Salı': [], 'Çarşamba': [], 'Perşembe': [],
+                      'Cuma': [], 'Cumartesi': [], 'Pazar': [],
+                    },
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('"$programName" başarıyla oluşturuldu.'), backgroundColor: Colors.green),
+                  );
+                }
+              },
+              child: const Text('Oluştur'),
+            ),
+          ],
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Kaydederken hata oluştu: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
-    } finally {
-      if(mounted) {
-        setState(() => _isSaving = false);
-      }
+      },
+    );
+  }
+
+  // Bir programı aktif program olarak ayarlar
+  Future<void> _setActiveProgram(String templateId) async {
+    await _firestore.collection('settings').doc('active_schedule').set({'activeTemplateId': templateId});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Program başarıyla aktif edildi!'), backgroundColor: Colors.green),
+    );
+  }
+
+  // Bir program şablonunu siler
+  Future<void> _deleteProgram(String templateId, String programName) async {
+    // Önce kullanıcıdan onay al
+    final bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Programı Sil'),
+        content: Text('"$programName" adlı programı kalıcı olarak silmek istediğinizden emin misiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('İptal')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sil', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _firestore.collection('schedule_templates').doc(templateId).delete();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$programName" silindi.'), backgroundColor: Colors.redAccent),
+      );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16.0),
-          children: [
-            _buildSectionTitle('Hafta İçi Etüt Saatleri (10 Adet)'),
-            const SizedBox(height: 8),
-            ...List.generate(10, (index) => _buildTimeTextField(
-              controller: _weekdayControllers[index],
-              label: '${index + 1}. Etüt Saati',
-            )),
-            const SizedBox(height: 24),
-            _buildSectionTitle('Cumartesi Etüt Saatleri (5 Adet)'),
-            const SizedBox(height: 8),
-            ...List.generate(5, (index) => _buildTimeTextField(
-              controller: _saturdayControllers[index],
-              label: '${index + 1}. Etüt Saati',
-            )),
-          ],
-        ),
+      body: StreamBuilder<DocumentSnapshot>(
+        // Aktif programın ID'sini dinle
+        stream: _firestore.collection('settings').doc('active_schedule').snapshots(),
+        builder: (context, activeScheduleSnapshot) {
+          final activeTemplateId = (activeScheduleSnapshot.data?.data() as Map<String, dynamic>?)?['activeTemplateId'];
+
+          return StreamBuilder<QuerySnapshot>(
+            // Tüm program şablonlarını dinle
+            stream: _firestore.collection('schedule_templates').orderBy('createdAt').snapshots(),
+            builder: (context, templatesSnapshot) {
+              if (templatesSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!templatesSnapshot.hasData || templatesSnapshot.data!.docs.isEmpty) {
+                return const Center(child: Text('Henüz oluşturulmuş bir program yok.'));
+              }
+
+              final templates = templatesSnapshot.data!.docs;
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(8.0),
+                itemCount: templates.length,
+                itemBuilder: (context, index) {
+                  final templateDoc = templates[index];
+                  final templateData = templateDoc.data() as Map<String, dynamic>;
+                  final programName = templateData['programName'] ?? 'İsimsiz Program';
+                  final bool isActive = templateDoc.id == activeTemplateId;
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    color: isActive ? Colors.green.shade50 : null,
+                    elevation: isActive ? 4 : 2,
+                    child: ListTile(
+                      leading: Icon(isActive ? Icons.check_circle : Icons.calendar_today_outlined, color: isActive ? Colors.green : Colors.grey),
+                      title: Text(programName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                      subtitle: Text(isActive ? 'Aktif Program' : 'Aktif Değil'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Düzenle', onPressed: () =>
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => EditScheduleTemplatePage(templateId: templateDoc.id, programName: programName))),
+                          ),
+                          IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: 'Sil', onPressed: () => _deleteProgram(templateDoc.id, programName)),
+                        ],
+                      ),
+                      onTap: isActive ? null : () => _setActiveProgram(templateDoc.id),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isSaving ? null : _saveTimes,
-        icon: _isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2,)) : const Icon(Icons.save_outlined),
-        label: const Text('Değişiklikleri Kaydet'),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Theme.of(context).primaryColor),
-    );
-  }
-
-  Widget _buildTimeTextField({required TextEditingController controller, required String label}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        ),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Bu alan boş bırakılamaz.';
-          }
-          final regex = RegExp(r'^\d{2}:\d{2}-\d{2}:\d{2}$');
-          if (!regex.hasMatch(value.trim())) {
-            return "Lütfen 'SS:DD-SS:DD' formatını kullanın.";
-          }
-          return null;
-        },
+        onPressed: _showCreateProgramDialog,
+        label: const Text('Yeni Program Ekle'),
+        icon: const Icon(Icons.add),
       ),
     );
   }

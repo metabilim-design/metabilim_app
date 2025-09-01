@@ -5,26 +5,31 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ... (Diğer fonksiyonlar aynı kalıyor)
   String _getErrorMessage(String code) {
     switch (code) {
-      case 'weak-password': return 'Şifre çok zayıf. Lütfen daha güçlü bir şifre seçin.';
-      case 'email-already-in-use': return 'Bu email/kullanıcı adı zaten kullanımda.';
-      case 'invalid-email': return 'Geçersiz bir email formatı girdiniz.';
-      case 'user-not-found': return 'Bu kullanıcı adı veya numaraya sahip bir kullanıcı bulunamadı.';
-      case 'wrong-password': return 'Mevcut şifrenizi yanlış girdiniz.';
-      case 'too-many-requests': return 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.';
-      default: return 'Bir hata oluştu. Lütfen tekrar deneyin.';
+      case 'weak-password':
+        return 'Şifre çok zayıf. Lütfen daha güçlü bir şifre seçin.';
+      case 'email-already-in-use':
+        return 'Bu email/kullanıcı adı zaten kullanımda.';
+      case 'invalid-email':
+        return 'Geçersiz bir email formatı girdiniz.';
+      case 'user-not-found':
+        return 'Bu kullanıcı adı veya numaraya sahip bir kullanıcı bulunamadı.';
+      case 'wrong-password':
+        return 'Mevcut şifrenizi yanlış girdiniz.';
+      case 'too-many-requests':
+        return 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.';
+      default:
+        return 'Bir hata oluştu. Lütfen tekrar deneyin.';
     }
   }
 
+  // GÜNCELLENDİ: Öğrenci kaydı sadeleştirildi. Sınıf ve koç ataması artık buradan yapılmıyor.
   Future<String?> registerStudent({
     required String name,
     required String surname,
     required String number,
     required String password,
-    required String className,
-    String? coachUid,
   }) async {
     String email = '$number@metabilim.app';
     try {
@@ -32,12 +37,19 @@ class AuthService {
       User? user = userCredential.user;
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
-          'name': name, 'surname': surname, 'number': number,
-          'email': email, 'role': 'Ogrenci', 'class': className, 'coachUid': coachUid,
+          'name': name,
+          'surname': surname,
+          'number': number,
+          'email': email,
+          'role': 'Ogrenci',
+          'class': null, // Başlangıçta sınıfı yok
+          'coachUid': null, // Başlangıçta koçu yok
         });
         return null;
       }
-    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    } on FirebaseAuthException catch (e) {
+      return _getErrorMessage(e.code);
+    }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
@@ -53,12 +65,17 @@ class AuthService {
       User? user = userCredential.user;
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
-          'name': name, 'surname': surname, 'username': username,
-          'email': email, 'role': 'Mentor',
+          'name': name,
+          'surname': surname,
+          'username': username,
+          'email': email,
+          'role': 'Mentor',
         });
         return null;
       }
-    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    } on FirebaseAuthException catch (e) {
+      return _getErrorMessage(e.code);
+    }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
@@ -74,12 +91,17 @@ class AuthService {
       User? user = userCredential.user;
       if (user != null) {
         await _firestore.collection('users').doc(user.uid).set({
-          'name': name, 'surname': surname, 'username': username,
-          'email': email, 'role': 'Eğitim Koçu',
+          'name': name,
+          'surname': surname,
+          'username': username,
+          'email': email,
+          'role': 'Eğitim Koçu',
         });
         return null;
       }
-    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    } on FirebaseAuthException catch (e) {
+      return _getErrorMessage(e.code);
+    }
     return 'Bilinmeyen bir hata oluştu.';
   }
 
@@ -89,7 +111,7 @@ class AuthService {
     required String surname,
     required String username,
     required String password,
-    required String? studentUid, // Yeni parametre
+    required String? studentUid,
   }) async {
     if (studentUid == null) {
       return 'Lütfen velinin bağlanacağı öğrenciyi seçin.';
@@ -109,7 +131,9 @@ class AuthService {
         });
         return null;
       }
-    } on FirebaseAuthException catch (e) { return _getErrorMessage(e.code); }
+    } on FirebaseAuthException catch (e) {
+      return _getErrorMessage(e.code);
+    }
     return 'Bilinmeyen bir hata oluştu.';
   }
 

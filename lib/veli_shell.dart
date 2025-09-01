@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:metabilim/pages/student/dashboard_page.dart';
-import 'package:metabilim/pages/student/homework_page.dart';
-import 'package:metabilim/pages/student/exams_page.dart';
-import 'package:metabilim/pages/student/attendance_page.dart';
-import 'package:metabilim/pages/mentor/profile_page.dart';
+import 'pages/student/dashboard_page.dart';
+import 'pages/student/homework_page.dart';
+import 'pages/student/exams_page.dart';
+import 'pages/student/attendance_page.dart';
+import 'pages/mentor/profile_page.dart';
 
 class VeliShell extends StatefulWidget {
   const VeliShell({super.key});
@@ -19,6 +19,7 @@ class _VeliShellState extends State<VeliShell> {
   int _selectedIndex = 0;
   String? _studentUid;
   String _studentName = '...';
+  String _parentName = '...';
   bool _isLoading = true;
 
   @override
@@ -33,7 +34,9 @@ class _VeliShellState extends State<VeliShell> {
 
     try {
       final parentDoc = await FirebaseFirestore.instance.collection('users').doc(parentUser.uid).get();
-      final studentId = parentDoc.data()?['studentUid'] as String?;
+      final parentData = parentDoc.data();
+      final studentId = parentData?['studentUid'] as String?;
+      final parentName = parentData?['name'] as String?;
 
       if (studentId != null && studentId.isNotEmpty) {
         final studentDoc = await FirebaseFirestore.instance.collection('users').doc(studentId).get();
@@ -41,6 +44,7 @@ class _VeliShellState extends State<VeliShell> {
           setState(() {
             _studentUid = studentId;
             _studentName = studentDoc.data()?['name'] ?? 'Öğrenci';
+            _parentName = parentName ?? 'Veli';
             _isLoading = false;
           });
         } else {
@@ -79,9 +83,8 @@ class _VeliShellState extends State<VeliShell> {
       );
     }
 
-    // DÜZELTME BURADA: DashboardPage'e studentName parametresini de gönderiyoruz
     final List<Widget> pages = <Widget>[
-      DashboardPage(studentId: _studentUid!, studentName: _studentName),
+      DashboardPage(studentId: _studentUid!, studentName: _studentName, parentName: _parentName),
       const HomeworkPage(),
       const ExamsPage(),
       AttendancePage(studentId: _studentUid!),
