@@ -1,11 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:metabilim/models/exam_result.dart';
 import 'package:metabilim/pages/admin/exam_results_preview_page.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -52,27 +50,21 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
     setState(() => _isProcessing = true);
 
     try {
-      updateStatus("1/3: PDF'ten metinler çıkarılıyor...");
+      updateStatus("PDF'ten metinler çıkarılıyor...");
       final pdfText = await _extractTextFromPdf(_pickedFile!.bytes!);
 
-      updateStatus("2/3: Yapay zeka ham veriyi işliyor...");
-      final plainTextData = await _extractDataAsPlainText(pdfText);
-
-      updateStatus("3/3: Veri doğrulanıyor ve arayüz hazırlanıyor...");
-      final jsonString = await _convertPlainTextToJson(plainTextData);
-
-      final results = _parseResults(jsonString);
+      updateStatus("Yapay zeka verileri ayıklıyor ve tablo oluşturuyor...");
+      final markdownTable = await _analyzeAndCreateTable(pdfText);
 
       if (mounted) {
         Navigator.push(context, MaterialPageRoute(
           builder: (context) => ExamResultsPreviewPage(
-            results: results,
+            markdownContent: markdownTable,
             examName: _pickedFile!.name,
           ),
         ));
       }
     } catch (e) {
-      debugPrint("Analiz sırasında hata oluştu: ${e.toString()}");
       if (mounted) _showErrorDialog(e.toString());
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -87,12 +79,11 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
     return text;
   }
 
-  GenerativeModel _getGenerativeModel({String? responseMimeType}) {
-    // Artık dotenv.load() yok, doğrudan anahtarı kullanıyoruz.
+  Future<String> _analyzeAndCreateTable(String text) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null) throw Exception('GEMINI_API_KEY .env dosyasında bulunamadı veya main.dart içinde yüklenmedi.');
+    if (apiKey == null) throw Exception('GEMINI_API_KEY bulunamadı.');
 
-    return GenerativeModel(
+    final model = GenerativeModel(
       model: 'gemini-1.5-pro-latest',
       apiKey: apiKey,
       safetySettings: [
@@ -101,84 +92,49 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
         SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
         SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
       ],
-      generationConfig: GenerationConfig(responseMimeType: responseMimeType),
     );
-  }
 
-  Future<String> _extractDataAsPlainText(String pdfText) async {
-    final model = _getGenerativeModel();
-    final prompt = _createPlainTextPrompt(pdfText);
-
+    // --- EN İYİ YAKLAŞIM: ADIM ADIM TALİMAT PROMPT'U ---
+    final prompt = _createFullDetailsTablePrompt(text);
     final response = await model.generateContent([Content.text(prompt)]);
-    final plainText = response.text;
 
-    if (plainText == null || plainText.trim().isEmpty) {
-      throw Exception("Yapay zeka PDF içeriğinden veri çıkaramadı.");
+    if (response.text == null || response.text!.trim().isEmpty) {
+      throw Exception("Yapay zeka bir sonuç tablosu üretemedi.");
     }
-    debugPrint("--- HAM VERİ ÇIKTISI ---\n$plainText");
-    return plainText;
-  }
-
-  Future<String> _convertPlainTextToJson(String plainTextData) async {
-    final model = _getGenerativeModel(responseMimeType: "application/json");
-    final prompt = _createJsonFromPlainTextPrompt(plainTextData);
-
-    final response = await model.generateContent([Content.text(prompt)]);
-    final jsonString = response.text;
-
-    if (jsonString == null || jsonString.trim().isEmpty) {
-      throw Exception("Yapay zeka, işlenen veriyi JSON formatına dönüştüremedi.");
-    }
-    debugPrint("--- JSON ÇIKTISI ---\n$jsonString");
-    return jsonString;
-  }
-
-  List<StudentExamResult> _parseResults(String jsonString) {
-    try {
-      final List<dynamic> parsedData = jsonDecode(jsonString);
-      return parsedData.map((data) => StudentExamResult.fromJson(data)).toList();
-    } on FormatException {
-      throw Exception("Son veri doğrulama adımı başarısız oldu. Lütfen tekrar deneyin.");
-    }
+    debugPrint("--- OLUŞTURULAN TABLO ---\n${response.text}");
+    return response.text!;
   }
 
   void updateStatus(String status) => setState(() => _processingStatus = status);
 
-  String _createPlainTextPrompt(String text) {
+  // --- EN İYİ YAKLAŞIM: ADIM ADIM TALİMAT PROMPT'U ---
+  String _createFullDetailsTablePrompt(String text) {
     return """
-    Aşağıdaki PDF metnini analiz et. Her öğrenci için bulduğun TÜM verileri tek bir satıra, aralarına "|" işareti koyarak yaz. Her öğrenci yeni bir satırda olmalı.
-    
-    İSTENEN SÜTUN SIRALAMASI (Bu sırayı asla değiştirme):
-    Öğrenci No|Ad Soyad|Sınıf|Genel Doğru|Genel Yanlış|Genel Net|TYT Puan|Genel Sıra|Sınıf Sıra|Türkçe D|Türkçe Y|Türkçe N|Tarih D|Tarih Y|Tarih N|Coğrafya D|Coğrafya Y|Coğrafya N|Felsefe D|Felsefe Y|Felsefe N|Din D|Din Y|Din N|Mat D|Mat Y|Mat N|Fizik D|Fizik Y|Fizik N|Kimya D|Kimya Y|Kimya N|Biyoloji D|Biyoloji Y|Biyoloji N
-    
-    KURALLAR:
-    - Sadece istenen veriyi, araya "|" koyarak yaz. Başka HİÇBİR ŞEY yazma.
-    - Eğer bir veri yoksa veya okunamıyorsa, o alanı boş bırakma, yerine "0" yaz.
-    - Sayılardaki virgülleri (,) mutlaka noktaya (.) çevir.
-    
-    GİRDİ METNİ:
+    Senin görevin, bir PDF'ten çıkarılmış karmaşık metni analiz edip, bunu hatasız bir Markdown tablosuna dönüştürmektir.
+
+    ADIM 1: SÜTUNLARI ANLA
+    Oluşturacağın tablonun sütunları tam olarak şunlar olmalı ve bu sırada olmalı:
+    `Sıra`|`Öğrenci Adı`|`Sınıf`|`Toplam D`|`Toplam Y`|`Toplam Net`|`TYT Puanı`|`Sınıf S.`|`Türkçe D`|`Türkçe Y`|`Türkçe N`|`Mat. D`|`Mat. Y`|`Mat. N`|`Fizik D`|`Fizik Y`|`Fizik N`|`Kimya D`|`Kimya Y`|`Kimya N`|`Biyo. D`|`Biyo. Y`|`Biyo. N`|`Tarih D`|`Tarih Y`|`Tarih N`|`Coğ. D`|`Coğ. Y`|`Coğ. N`|`Fel. D`|`Fel. Y`|`Fel. N`|`Din D`|`Din Y`|`Din N`
+
+    ADIM 2: ÖĞRENCİ VERİLERİNİ TEK TEK İŞLE
+    Metni satır satır oku ve her bir öğrenciye ait veriyi bul.
+    - **EN ÖNEMLİ KURAL:** Bazen iki öğrencinin verisi (isimleri, notları vb.) tek bir satır bloğunda birleşmiş olabilir. Bu blokları GÖRDÜĞÜN ANDA, onları mantıksal olarak iki ayrı öğrenci satırına BÖL. ASLA birleşik bırakma.
+    - Her öğrenci için ADIM 1'deki sütunlara karşılık gelen verileri yerleştir.
+    - Eğer bir veri yoksa veya eksikse, o hücreye "0" yaz.
+
+    ADIM 3: TABLOYU OLUŞTUR VE ÇIKTI VER
+    - Tüm öğrencileri işledikten sonra, sonucu Markdown tablosu olarak oluştur.
+    - Tüm ondalık sayılarda virgül (,) yerine nokta (.) kullandığından emin ol.
+    - Çıktı olarak SADECE ve SADECE Markdown tablosunu ver. Başka tek bir kelime bile yazma.
+
+    İşte analiz etmen gereken metin:
     $text
-    """;
-  }
-
-  String _createJsonFromPlainTextPrompt(String plainTextData) {
-    return """
-    Aşağıdaki "|" ile ayrılmış ham veriyi al ve bunu bir JSON dizisine dönüştür. 
-    
-    JSON YAPISI:
-    Her satırı bir JSON nesnesine çevir. Nesne şu alanları içermeli: `studentNumber`, `fullName`, `className`, `totalCorrect`, `totalWrong`, `totalNet`, `score`, `overallRank`, `classRank` ve `lessonResults` adında bir dizi. `lessonResults` dizisi, her ders için `lessonName`, `correct`, `wrong`, `net` alanlarını içeren nesnelerden oluşmalı.
-    
-    KURALLAR:
-    - Çıktın SADECE ve SADECE `application/json` formatında olmalı.
-    - Başka HİÇBİR AÇIKLAMA VEYA METİN EKLEME.
-
-    GİRDİ VERİSİ:
-    $plainTextData
     """;
   }
 
   @override
   Widget build(BuildContext context) {
+    // UI kodunda herhangi bir değişiklik yok.
     final hasFile = _pickedFile != null;
 
     return Scaffold(

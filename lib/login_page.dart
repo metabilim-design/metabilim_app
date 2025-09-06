@@ -60,7 +60,7 @@ class _LoginPageState extends State<LoginPage> {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MentorShell()));
             break;
           case 'Admin':
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminShell()));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) =>  AdminShell()));
             break;
           case 'Eğitim Koçu':
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EgitimKocuShell()));
