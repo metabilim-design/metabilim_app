@@ -1,9 +1,13 @@
+// lib/pages/admin/exam_analysis_page.dart
+
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:metabilim/models/exam_result.dart';
 import 'package:metabilim/pages/admin/exam_results_preview_page.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -18,6 +22,30 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
   bool _isProcessing = false;
   String _processingStatus = "";
   PlatformFile? _pickedFile;
+  late final GenerativeModel _generativeModel;
+
+  @override
+  void initState() {
+    super.initState();
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null) {
+      throw Exception('GEMINI_API_KEY .env dosyasında bulunamadı.');
+    }
+
+    _generativeModel = GenerativeModel(
+      model: 'gemini-1.5-pro-latest',
+      apiKey: apiKey,
+      safetySettings: [
+        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+      ],
+      generationConfig: GenerationConfig(
+        responseMimeType: "application/json",
+      ),
+    );
+  }
 
   void _showErrorDialog(String message) {
     final displayMessage = message.startsWith("Exception: ") ? message.substring(11) : message;
@@ -46,23 +74,25 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
       return;
     }
     if (!mounted) return;
-
     setState(() => _isProcessing = true);
 
     try {
-      updateStatus("PDF'ten metinler çıkarılıyor...");
-      final pdfText = await _extractTextFromPdf(_pickedFile!.bytes!);
+      updateStatus("PDF sayfaları analiz ediliyor...");
+      final examName = _pickedFile!.name.replaceAll(RegExp(r'\.pdf$'), '');
 
-      updateStatus("Yapay zeka verileri ayıklıyor ve tablo oluşturuyor...");
-      final markdownTable = await _analyzeAndCreateTable(pdfText);
+      final List<StudentExamResult> allResults = await _processPdfPageByPage(_pickedFile!.bytes!, examName);
+
+      if(allResults.isEmpty) {
+        throw Exception("PDF'ten hiçbir öğrenci verisi çıkarılamadı.");
+      }
 
       if (mounted) {
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => ExamResultsPreviewPage(
-            markdownContent: markdownTable,
-            examName: _pickedFile!.name,
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ExamResultsPreviewPage(results: allResults, examName: examName),
           ),
-        ));
+        );
       }
     } catch (e) {
       if (mounted) _showErrorDialog(e.toString());
@@ -71,120 +101,83 @@ class _ExamAnalysisPageState extends State<ExamAnalysisPage> {
     }
   }
 
-  Future<String> _extractTextFromPdf(Uint8List pdfBytes) async {
+  // ÖNCEKİ MÜKEMMEL ÇALIŞAN KODUMUZ. SADECE PROMPT GÜNCELLENDİ.
+  Future<List<StudentExamResult>> _processPdfPageByPage(Uint8List pdfBytes, String examName) async {
+    final List<StudentExamResult> allResults = [];
     final document = PdfDocument(inputBytes: pdfBytes);
-    final text = PdfTextExtractor(document).extractText();
-    document.dispose();
-    if (text.trim().isEmpty) throw Exception("PDF dosyasından metin okunamadı.");
-    return text;
-  }
+    final textExtractor = PdfTextExtractor(document);
 
-  Future<String> _analyzeAndCreateTable(String text) async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null) throw Exception('GEMINI_API_KEY bulunamadı.');
+    for (int i = 0; i < document.pages.count; i++) {
+      updateStatus("Sayfa ${i + 1}/${document.pages.count} işleniyor...");
 
-    final model = GenerativeModel(
-      model: 'gemini-1.5-pro-latest',
-      apiKey: apiKey,
-      safetySettings: [
-        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
-        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
-      ],
-    );
+      final String pageText = textExtractor.extractText(startPageIndex: i, endPageIndex: i);
 
-    // --- EN İYİ YAKLAŞIM: ADIM ADIM TALİMAT PROMPT'U ---
-    final prompt = _createFullDetailsTablePrompt(text);
-    final response = await model.generateContent([Content.text(prompt)]);
+      // Önceki hataya sebep olan gereksiz 'if' kontrolü kaldırıldı.
+      if (pageText.trim().isEmpty) {
+        debugPrint("Sayfa ${i+1} tamamen boş, atlanıyor.");
+        continue;
+      }
 
-    if (response.text == null || response.text!.trim().isEmpty) {
-      throw Exception("Yapay zeka bir sonuç tablosu üretemedi.");
+      try {
+        final prompt = _createSinglePagePrompt(pageText, examName);
+        final response = await _generativeModel.generateContent([Content.text(prompt)]);
+
+        if (response.text != null && response.text!.isNotEmpty) {
+          String responseText = response.text!.replaceAll("```json", "").replaceAll("```", "").trim();
+          final List<dynamic> jsonList = jsonDecode(responseText);
+          if (jsonList.isNotEmpty) {
+            allResults.add(StudentExamResult.fromJson(jsonList.first));
+          }
+        }
+      } catch (e) {
+        debugPrint("Sayfa ${i+1} işlenirken hata (atlandı): ${e.toString()}");
+        continue;
+      }
     }
-    debugPrint("--- OLUŞTURULAN TABLO ---\n${response.text}");
-    return response.text!;
+
+    document.dispose();
+    updateStatus("Analiz tamamlandı!");
+    return allResults;
   }
 
   void updateStatus(String status) => setState(() => _processingStatus = status);
 
-  // --- EN İYİ YAKLAŞIM: ADIM ADIM TALİMAT PROMPT'U ---
-  String _createFullDetailsTablePrompt(String text) {
+  // --- SON DOKUNUŞUN YAPILDIĞI NİHAİ PROMPT ---
+  String _createSinglePagePrompt(String pageText, String examName) {
     return """
-    Senin görevin, bir PDF'ten çıkarılmış karmaşık metni analiz edip, bunu hatasız bir Markdown tablosuna dönüştürmektir.
+    # GÖREV:
+    Sana verilen metin, bir PDF sayfasından alınmış TEK BİR ÖĞRENCİYE ait sınav karnesidir.
+    Bu PDF'in HER SAYFASINDA bir öğrenci var, bu yüzden bu sayfada da MUTLAKA bir öğrenci olmalı.
+    Görevin, bu öğrencinin tüm bilgilerini (adı, numarası, sınıfı, puanı, sıralamaları, ders netleri vb.) eksiksiz ve hatasız bir şekilde çıkarıp, 
+    tek bir JSON nesnesi içeren bir JSON dizisi olarak çıktı vermektir.
 
-    ADIM 1: SÜTUNLARI ANLA
-    Oluşturacağın tablonun sütunları tam olarak şunlar olmalı ve bu sırada olmalı:
-    `Sıra`|`Öğrenci Adı`|`Sınıf`|`Toplam D`|`Toplam Y`|`Toplam Net`|`TYT Puanı`|`Sınıf S.`|`Türkçe D`|`Türkçe Y`|`Türkçe N`|`Mat. D`|`Mat. Y`|`Mat. N`|`Fizik D`|`Fizik Y`|`Fizik N`|`Kimya D`|`Kimya Y`|`Kimya N`|`Biyo. D`|`Biyo. Y`|`Biyo. N`|`Tarih D`|`Tarih Y`|`Tarih N`|`Coğ. D`|`Coğ. Y`|`Coğ. N`|`Fel. D`|`Fel. Y`|`Fel. N`|`Din D`|`Din Y`|`Din N`
+    # İSTENEN JSON YAPISI:
+    `[{"examName": "$examName", "studentNumber": "String", "fullName": "String", "className": "String", "totalCorrect": "double", "totalWrong": "double", "totalNet": "double", "score": "double", "overallRank": "int", "classRank": "int", "lessonResults": [{"lessonName": "String", "correct": "double", "wrong": "double", "net": "double"}]}]`
+    
+    # KESİN ve TAVİZSİZ KURALLAR:
+    - Çıktın, SADECE ve SADECE tek bir öğrenci nesnesi içeren, tam ve geçerli bir JSON dizisi olmalıdır. `[ { ... } ]`
+    - Bu sayfada MUTLAKA bir öğrenci olduğunu unutma. Metin biraz dağınık olsa bile, "ADI SOYADI" ve "ÖĞRENCİ NO" gibi anahtar bilgileri ara ve bul. Asla pes edip boş sonuç dönme.
+    - Metinde öğrenci verisi bulamazsan bile, elinden geleni yapıp en azından "fullName" ve "studentNumber" alanlarını doldurmaya çalışarak bir sonuç üret. Sadece son çare olarak boş bir JSON dizisi `[]` döndür.
+    - Eksik veya okunamayan sayısal alanlar için 0, metin alanları için "Bilinmiyor" kullan.
+    - Ondalık sayılarda kesinlikle virgül (,) yerine nokta (.) kullan.
+    - Ders adları şunlar olmalı: 'Türkçe', 'Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji'.
 
-    ADIM 2: ÖĞRENCİ VERİLERİNİ TEK TEK İŞLE
-    Metni satır satır oku ve her bir öğrenciye ait veriyi bul.
-    - **EN ÖNEMLİ KURAL:** Bazen iki öğrencinin verisi (isimleri, notları vb.) tek bir satır bloğunda birleşmiş olabilir. Bu blokları GÖRDÜĞÜN ANDA, onları mantıksal olarak iki ayrı öğrenci satırına BÖL. ASLA birleşik bırakma.
-    - Her öğrenci için ADIM 1'deki sütunlara karşılık gelen verileri yerleştir.
-    - Eğer bir veri yoksa veya eksikse, o hücreye "0" yaz.
-
-    ADIM 3: TABLOYU OLUŞTUR VE ÇIKTI VER
-    - Tüm öğrencileri işledikten sonra, sonucu Markdown tablosu olarak oluştur.
-    - Tüm ondalık sayılarda virgül (,) yerine nokta (.) kullandığından emin ol.
-    - Çıktı olarak SADECE ve SADECE Markdown tablosunu ver. Başka tek bir kelime bile yazma.
-
-    İşte analiz etmen gereken metin:
-    $text
+    # İŞLENECEK KARNE METNİ:
+    $pageText
     """;
   }
 
   @override
   Widget build(BuildContext context) {
-    // UI kodunda herhangi bir değişiklik yok.
-    final hasFile = _pickedFile != null;
-
     return Scaffold(
-      appBar: AppBar(title: Text('Deneme Sonuç Analizi', style: GoogleFonts.poppins())),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (hasFile)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                    title: Text(_pickedFile!.name),
-                    subtitle: Text('${(_pickedFile!.size / 1024).toStringAsFixed(2)} KB'),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _pickPdf,
-                icon: const Icon(Icons.upload_file),
-                label: const Text('PDF Seç'),
-              ),
-              const SizedBox(height: 20),
-              if (hasFile)
-                _isProcessing
-                    ? Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(_processingStatus, style: GoogleFonts.poppins(fontSize: 16)),
-                    ],
-                  ),
-                )
-                    : ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: startAnalysis,
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('Yapay Zeka ile Analiz Et'),
-                ),
-            ],
-          ),
-        ),
-      ),
+      appBar: AppBar(title: Text('Bireysel Karne Analizi', style: GoogleFonts.poppins())),
+      body: Center(child: Padding(padding: const EdgeInsets.all(16.0), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (_pickedFile != null) Card(child: ListTile(leading: const Icon(Icons.picture_as_pdf, color: Colors.red), title: Text(_pickedFile!.name, overflow: TextOverflow.ellipsis), subtitle: Text('${(_pickedFile!.size / 1024).toStringAsFixed(2)} KB'))),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(onPressed: _isProcessing ? null : _pickPdf, icon: const Icon(Icons.upload_file), label: const Text('Bireysel Karneleri Seç')),
+        const SizedBox(height: 20),
+        if (_pickedFile != null) _isProcessing ? Padding(padding: const EdgeInsets.all(20.0), child: Column(children: [const CircularProgressIndicator(), const SizedBox(height: 16), Text(_processingStatus, style: GoogleFonts.poppins(fontSize: 16))])) : ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.secondary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)), onPressed: startAnalysis, icon: const Icon(Icons.auto_awesome), label: const Text('Kusursuz Analizi Başlat'))
+      ]))),
     );
   }
 }

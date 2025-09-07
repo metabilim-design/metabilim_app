@@ -1,3 +1,5 @@
+// lib/models/exam_result.dart
+
 class LessonResult {
   final String lessonName;
   final double correct;
@@ -19,9 +21,19 @@ class LessonResult {
       net: (json['net'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lessonName': lessonName,
+      'correct': correct,
+      'wrong': wrong,
+      'net': net,
+    };
+  }
 }
 
 class StudentExamResult {
+  final String examName;
   final String studentNumber;
   final String fullName;
   final String className;
@@ -34,6 +46,7 @@ class StudentExamResult {
   final List<LessonResult> lessonResults;
 
   StudentExamResult({
+    required this.examName,
     required this.studentNumber,
     required this.fullName,
     required this.className,
@@ -51,6 +64,7 @@ class StudentExamResult {
     List<LessonResult> lessonList = lessonsFromJson.map((i) => LessonResult.fromJson(i)).toList();
 
     return StudentExamResult(
+      examName: json['examName'] ?? 'İsimsiz Sınav',
       studentNumber: json['studentNumber'] ?? '',
       fullName: json['fullName'] ?? 'İsimsiz',
       className: json['className'] ?? 'Sınıfsız',
@@ -62,5 +76,21 @@ class StudentExamResult {
       classRank: (json['classRank'] as num?)?.toInt() ?? 0,
       lessonResults: lessonList,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'examName': examName,
+      'studentNumber': studentNumber,
+      'fullName': fullName,
+      'className': className,
+      'totalCorrect': totalCorrect,
+      'totalWrong': totalWrong,
+      'totalNet': totalNet,
+      'score': score,
+      'overallRank': overallRank,
+      'classRank': classRank,
+      'lessonResults': lessonResults.map((e) => e.toJson()).toList(),
+    };
   }
 }
